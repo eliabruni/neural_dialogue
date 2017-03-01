@@ -82,9 +82,9 @@ parser.add_argument('-start_epoch', type=int, default=1,
 parser.add_argument('-param_init', type=float, default=0.1,
                     help="""Parameters are initialized over uniform distribution
                     with support (-param_init, param_init)""")
-parser.add_argument('-optim', default='sgd',
+parser.add_argument('-optim', default='adam',
                     help="Optimization method. [sgd|adagrad|adadelta|adam|rmsprop]")
-parser.add_argument('-learning_rate', type=float, default=1.0,
+parser.add_argument('-learning_rate', type=float, default=2e-5,
                     help="""Starting learning rate. If adagrad/adadelta/adam/rmsprop is
                     used, then this is the global learning rate. Recommended
                     settings: sgd = 1, adagrad = 0.1, adadelta = 1, adam = 0.1""")
@@ -146,7 +146,6 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
     loss = 0
     outputs = Variable(outputs.data, requires_grad=(not eval), volatile=eval).contiguous()
 
-
     batch_size = outputs.size(1)
     if opt.supervision:
         if not opt.generate:
@@ -167,6 +166,9 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
             loss += loss_t.data[0]
             if not eval:
                 loss_t.div(batch_size).backward()
+
+        grad_output = None if outputs.grad is None else outputs.grad.data
+
     else:
         noise_sources = one_hot(G, sources.data,
                                 opt.unievrsalVocabSize)
@@ -183,7 +185,6 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
         fake = fake.contiguous().view(fake.size()[0] / opt.batch_size, opt.batch_size, fake.size()[1])
         real = real.contiguous().view(real.size()[0] / opt.batch_size, opt.batch_size, real.size()[1])
 
-        grad_output = None if outputs.grad is None else outputs.grad.data
 
         if opt.wasser:
             ############################
@@ -203,8 +204,8 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
             errD = -(torch.mean(D_real) - torch.mean(D_fake))
             errD.backward()
 
-            # for p in D.parameters():
-            #     print('p.grad.data: ' + str(p.grad.data))
+            for p in D.parameters():
+                print('p.grad.data: ' + str(p.grad.data))
 
             optimizerD.step()
 
@@ -221,7 +222,12 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
             errG = -torch.mean(D_fake)
 
             errG.backward()
+            grad_output = None if outputs.grad is None else outputs.grad.data
             outputs.backward(grad_output)
+
+            print('ITERATION: ')
+            for p in G.parameters():
+                print('p.grad.data: ' + str(p.grad.data))
 
             D_G_z2 = D_fake.data.mean()
             optimizerG.step()
@@ -328,9 +334,9 @@ def eval(model, criterion, data):
 def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=None):
     print(G)
     G.train()
-    if optimizerG.last_ppl is None:
-        for p in G.parameters():
-            p.data.uniform_(-opt.param_init, opt.param_init)
+    # if optimizerG.last_ppl is None:
+    #     for p in G.parameters():
+    #         p.data.uniform_(-opt.param_init, opt.param_init)
 
     if opt.supervision:
         # define criterion of each GPU
@@ -388,13 +394,11 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     start = time.time()
 
 
-
             else:
                 loss, gradOutput = memoryEfficientLoss(G, outputs, sources,
                                                        targets, criterion,
                                                        optimizerG, D,
                                                        optimizerD)
-
 
 
                 # anneal tau for gumbel
@@ -489,15 +493,14 @@ def main():
             for p in D.parameters():
                 p.data.uniform_(-opt.param_init, opt.param_init)
 
-            if opt.wasser:
-                optimizerG = optim.RMSprop(G.parameters(), lr=5e-5)
-                optimizerD = optim.RMSprop(D.parameters(), lr=5e-5)
-            else:
-                optimizerD = onmt.Optim(
-                    G.parameters(), opt.optim, opt.learning_rate, opt.max_grad_norm,
-                    lr_decay=opt.learning_rate_decay,
-                    start_decay_at=opt.start_decay_at
-                )
+            optimizerG = optim.RMSprop(G.parameters(), lr=5e-5)
+            optimizerD = optim.RMSprop(D.parameters(), lr=5e-5)
+
+            # optimizerD = onmt.Optim(
+            #     G.parameters(), opt.optim, opt.learning_rate, opt.max_grad_norm,
+            #     lr_decay=opt.learning_rate_decay,
+            #     start_decay_at=opt.start_decay_at
+            # )
 
             if opt.cuda:
                 D.cuda()
