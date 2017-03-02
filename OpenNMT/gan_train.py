@@ -153,7 +153,7 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
     if opt.supervision or eval:
 
         # Legacy code, can be used with -geneare False option
-        if not opt.generate:
+        if not opt.generate or eval:
             outputs_split = torch.split(outputs, opt.max_generator_batches)
             targets_split = torch.split(targets.contiguous(), opt.max_generator_batches)
             for out_t, targ_t in zip(outputs_split, targets_split):
@@ -324,6 +324,7 @@ def eval(G, criterion, data):
         loss, _, _, _, _, _, _ = memoryEfficientLoss(G, outputs,
                                                      sources, targets,
                                                     criterion,None,None,None,True)
+
         # (G, outputs, sources, targets, criterion, optimizerG = None, D = None, optimizerD = None, eval = False)
         # loss, _ = memoryEfficientLoss(G, outputs, sources, targets, criterion, eval=False)
         total_loss += loss
