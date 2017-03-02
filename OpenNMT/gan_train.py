@@ -42,7 +42,7 @@ parser.add_argument('-gumbel_anneal_interval', type=int, default=1000,
                     help="""Temperature annealing interval for gumbel. -1 to switch
                          off the annealing""")
 ## D options
-parser.add_argument('-D_rnn_size', type=int, default=10,
+parser.add_argument('-D_rnn_size', type=int, default=1000,
                     help='D: Size fo LSTM hidden states')
 parser.add_argument('-D_dropout', type=float, default=0.3,
                     help='Dropout probability; applied between LSTM stacks.')
@@ -52,9 +52,9 @@ parser.add_argument('-D_dropout', type=float, default=0.3,
 
 parser.add_argument('-layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
-parser.add_argument('-rnn_size', type=int, default=10,
+parser.add_argument('-rnn_size', type=int, default=500,
                     help='Size of LSTM hidden states')
-parser.add_argument('-word_vec_size', type=int, default=10,
+parser.add_argument('-word_vec_size', type=int, default=500,
                     help='Word embedding sizes')
 parser.add_argument('-input_feed', type=int, default=1,
                     help="""Feed the context vector at each time step as
@@ -178,8 +178,8 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
 
     else:
 
-        if log_pred:
-            log_predictions(outputs, targets, G.log['distances'])
+        # if log_pred:
+        #     log_predictions(outputs, targets, G.log['distances'])
 
         noise_sources = one_hot(G, sources.data,
                                 opt.unievrsalVocabSize)
