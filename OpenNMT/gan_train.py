@@ -160,9 +160,6 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
 
                 out_t = out_t.view(-1, out_t.size(2))
                 pred_t = G.generator(out_t)
-                print('pred_t: ' + str(pred_t))
-                print('targ_t: ' + str(targ_t))
-                print('targ_t.view(-1): ' + str(targ_t.view(-1)))
                 loss_t = criterion(pred_t, targ_t.view(-1))
                 loss += loss_t.data[0]
                 if not eval:
@@ -170,6 +167,9 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
         else:
             pred_t = outputs
             targ_t = targets.contiguous()
+            print('pred_t: ' + str(pred_t))
+            print('targ_t: ' + str(targ_t))
+            print('targ_t.view(-1): ' + str(targ_t.view(-1)))
             loss_t = criterion(pred_t, targ_t.view(-1))
             loss += loss_t.data[0]
             if not eval:
