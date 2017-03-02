@@ -118,8 +118,8 @@ parser.add_argument('-gpus', default=[], nargs='+', type=int,
 
 parser.add_argument('-log_interval', type=int, default=50,
                     help="Print stats at this interval.")
-# parser.add_argument('-seed', type=int, default=3435,
-#                     help="Seed for random initialization")
+parser.add_argument('-seed', type=int, default=3435,
+                    help="Seed for random initialization")
 
 opt = parser.parse_args()
 opt.cuda = len(opt.gpus)
