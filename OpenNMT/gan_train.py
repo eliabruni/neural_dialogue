@@ -52,7 +52,7 @@ parser.add_argument('-layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
 parser.add_argument('-rnn_size', type=int, default=500,
                     help='Size of LSTM hidden states')
-parser.add_argument('-word_vec_size', type=int, default=500,
+parser.add_argument('-word_vec_size', type=int, default=501,
                     help='Word embedding sizes')
 parser.add_argument('-input_feed', type=int, default=1,
                     help="""Feed the context vector at each time step as
@@ -603,15 +603,16 @@ def main():
             # If we are in GAN aetting, build up the discriminatorZ
             D = onmt.Models.D(opt, dicts['tgt'])
 
-            # for p in D.parameters():
-            #     p.data.uniform_(-opt.param_init, opt.param_init)
+            for p in D.parameters():
+                p.data.uniform_(-opt.param_init, opt.param_init)
 
-            if opt.wasser:
-                optimizerG = optim.RMSprop(G.parameters(), lr=5e-5)
-                optimizerD = optim.RMSprop(D.parameters(), lr=5e-5)
-            else:
-                optimizerG = optim.Adam(G.parameters(), lr=5e-5)
-                optimizerD = optim.Adam(D.parameters(), lr=5e-5)
+            optimizerG = optim.RMSprop(G.parameters(), lr=5e-5)
+            optimizerD = optim.RMSprop(D.parameters(), lr=5e-5)
+            # if opt.wasser:
+            #
+            # else:
+            #     optimizerG = optim.Adam(G.parameters(), lr=5e-5)
+            #     optimizerD = optim.Adam(D.parameters(), lr=5e-5)
                 # optimizerD = onmt.Optim(
                 #     G.parameters(), opt.optim, opt.learning_rate, opt.max_grad_norm,
                 #     lr_decay=opt.learning_rate_decay,
