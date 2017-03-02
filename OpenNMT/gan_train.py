@@ -430,7 +430,10 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
             G.generator.iter_cnt += 1
 
-        return total_loss / total_words
+        if opt.supervision:
+            return total_loss / total_words
+        else:
+            return 0
 
     for epoch in range(opt.start_epoch, opt.epochs + 1):
         print('')
