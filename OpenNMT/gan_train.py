@@ -7,6 +7,8 @@ from torch.autograd import Variable
 import math
 import time
 from torch import optim
+import numba
+import numpy as np
 
 parser = argparse.ArgumentParser(description='train.py')
 
@@ -143,7 +145,7 @@ def NMTCriterion(vocabSize):
     return crit
 
 
-def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None, D=None, optimizerD=None, eval=False):
+def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None, D=None, optimizerD=None, log_pred=False, eval=False):
     # compute generations one piece at a time
     loss = 0
     errD, errG, D_x, D_G_z1, D_G_z2 = 0, 0, 0, 0, 0
@@ -175,6 +177,10 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
         grad_output = None if outputs.grad is None else outputs.grad.data
 
     else:
+
+        if log_pred:
+            log_predictions(outputs, targets, G.log['distances'])
+
         noise_sources = one_hot(G, sources.data,
                                 opt.unievrsalVocabSize)
         noise_targets = one_hot(G, targets.data,
@@ -302,6 +308,59 @@ def one_hot(G, input, num_input_symbols):
     one_hot_tensor = torch.transpose(one_hot_tensor,1,0)
     return Variable(one_hot_tensor.contiguous().view(one_hot_tensor.size()[0]*one_hot_tensor.size()[1], one_hot_tensor.size()[2]))
 
+def lev_dist(source, target):
+
+    @numba.jit("f4(i8[:], i8[:])", nopython=True, cache=True, target="cpu")
+    def jitted_lev_dist(vec1, vec2):
+        # Prepare a matrix
+        dist = np.zeros((vec1.size + 1, vec2.size + 1))
+        dist[:, 0] = np.arange(vec1.size + 1)
+        dist[0, :] = np.arange(vec2.size + 1)
+
+        # Compute distance
+        for i in xrange(vec1.size):
+            for j in xrange(vec2.size):
+                cost = 0 if vec1[i] == vec2[j] else 1
+                dist[i + 1, j + 1] = min(
+                    dist[i, j + 1] + 1,   # deletion
+                    dist[i + 1, j] + 1,   # insertion
+                    dist[i, j] + cost   # substitution
+                )
+        return dist[-1][-1] / max(vec1.size, vec2.size)
+
+    return 0 if np.array_equal(source, target) else jitted_lev_dist(source, target)
+
+
+def log_predictions(pred_t, targ_t, distances):
+    pred_t_data = pred_t.data.cpu().numpy()
+    argmaxed_preds = np.argmax(pred_t_data, axis=1)
+    argmax_preds_sorted = np.ones((opt.batch_size,argmaxed_preds.size/opt.batch_size ))
+    cnt=0
+    for i in range(0, argmaxed_preds.size, opt.batch_size):
+        for j in range(opt.batch_size):
+            argmax_preds_sorted[j][cnt] = argmaxed_preds[i+j]
+        cnt+=1
+    argmax_inputs = targ_t.data.cpu().numpy()
+    argmax_targets = np.ones((argmax_inputs[0].size, len(argmax_inputs)))
+
+    for i in range(argmax_inputs[0].size):
+        for j in range(len(argmax_inputs)):
+            argmax_targets[i][j] = argmax_inputs[j][i].astype(int)
+
+    argmax_preds_sorted = argmax_preds_sorted.astype(int)
+    rand_idx = np.random.randint(len(argmax_preds_sorted))
+    print('SAMPLE:')
+    print('preds: ' + str(argmax_preds_sorted[rand_idx]))
+    print('trgts: ' + str(argmax_targets[rand_idx].astype(int)))
+    distances.append(lev_dist(argmax_targets[rand_idx].astype(int), argmax_preds_sorted[rand_idx]))
+    if len(distances) <= 10:
+        avg_dist = np.mean(distances)
+        avg_dist_10 = avg_dist
+    else:
+        avg_dist = np.mean(distances[:-10])
+        avg_dist_10 = np.mean(distances[-10:])
+    print('past avg lev distance: %f, last 10 avg lev distance %f \n' % (avg_dist, avg_dist_10))
+
 def eval(G, criterion, data):
     total_loss = 0
     total_words = 0
@@ -314,7 +373,7 @@ def eval(G, criterion, data):
         sources = batch[0]
         loss, _, _, _, _, _, _ = memoryEfficientLoss(G, outputs,
                                                      sources, targets,
-                                                    criterion,None,None,None,True)
+                                                    criterion,None,None,None,False,True)
 
         # (G, outputs, sources, targets, criterion, optimizerG = None, D = None, optimizerD = None, eval = False)
         # loss, _ = memoryEfficientLoss(G, outputs, sources, targets, criterion, eval=False)
@@ -396,10 +455,11 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
 
             else:
+                log_pred = i % (opt.log_interval) == 0 and i > 0
                 _, gradOutput, errD, errG, D_x, D_G_z1, D_G_z2 = memoryEfficientLoss(G, outputs, sources,
                                                        targets, criterion,
                                                        optimizerG, D,
-                                                       optimizerD)
+                                                       optimizerD, log_pred)
 
                 outputs.backward(gradOutput)
 
