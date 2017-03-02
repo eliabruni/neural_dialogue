@@ -209,9 +209,6 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
             errD = -(torch.mean(D_real) - torch.mean(D_fake))
             errD.backward()
 
-            for p in D.parameters():
-                print('p.grad.data: ' + str(p.grad.data))
-
             optimizerD.step()
 
             for p in D.parameters():
