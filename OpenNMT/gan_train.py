@@ -24,7 +24,7 @@ parser.add_argument('-train_from',
 
 
 ## GAN options
-parser.add_argument('-generate', type=bool, default=False,
+parser.add_argument('-generate', type=bool, default=True,
                     help='Whether to generate')
 parser.add_argument('-supervision', type=bool, default=False,
                     help='Whether to use supervision')
@@ -46,14 +46,13 @@ parser.add_argument('-D_dropout', type=float, default=0.3,
                     help='Dropout probability; applied between LSTM stacks.')
 
 
-
 ## Model options
 
 parser.add_argument('-layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
-parser.add_argument('-rnn_size', type=int, default=500,
+parser.add_argument('-rnn_size', type=int, default=5,
                     help='Size of LSTM hidden states')
-parser.add_argument('-word_vec_size', type=int, default=500,
+parser.add_argument('-word_vec_size', type=int, default=5,
                     help='Word embedding sizes')
 parser.add_argument('-input_feed', type=int, default=1,
                     help="""Feed the context vector at each time step as
@@ -68,8 +67,7 @@ parser.add_argument('-brnn_merge', default='concat',
                     [concat|sum]""")
 
 ## Optimization options
-
-parser.add_argument('-batch_size', type=int, default=64,
+parser.add_argument('-batch_size', type=int, default=2,
                     help='Maximum batch size')
 parser.add_argument('-max_generator_batches', type=int, default=64,
                     help="""Maximum batches of words in a sequence to run
@@ -152,6 +150,8 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
 
     batch_size = outputs.size(1)
     if opt.supervision:
+
+        # Legacy code, can be used with -geneare False option
         if not opt.generate:
             outputs_split = torch.split(outputs, opt.max_generator_batches)
             targets_split = torch.split(targets.contiguous(), opt.max_generator_batches)
@@ -246,8 +246,6 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
             # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
             ###########################
             D.zero_grad()
-
-
 
             # train with real
             output = D(real)
@@ -393,6 +391,12 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                            math.exp(report_loss / report_words),
                            report_words / (time.time() - start),
                            time.time() - start_time))
+                    if opt.use_gumbel:
+                        if opt.estimate_temp:
+                            learned_temp = G.generator.learned_temp
+                        else:
+                            learned_temp = G.generator.scheduled_temp
+                        print("Real temp: %.4f, Generated temp: %.4f " % (G.generator.real_temp, learned_temp))
 
                     report_loss = report_words = 0
                     start = time.time()
@@ -468,10 +472,12 @@ def main():
         generator = onmt.Models.GANGenerator(opt, dicts['tgt'])
 
         if opt.cuda > 1:
-            generator = nn.DataParallel(generator, device_ids=opt.gpus)
+                generator = nn.DataParallel(generator, device_ids=opt.gpus)
         G = onmt.Models.NMTModel(encoder, decoder, generator)
+
         if opt.generate:
             G.set_generate(True)
+
         if opt.cuda > 1:
             G = nn.DataParallel(G, device_ids=opt.gpus)
         if opt.cuda:
@@ -492,6 +498,8 @@ def main():
         D=None
         optimizerD=None
         if not opt.supervision:
+
+            # If we are in GAN aetting, build up the discriminatorZ
             D = onmt.Models.D(opt, dicts['tgt'])
 
             for p in D.parameters():
