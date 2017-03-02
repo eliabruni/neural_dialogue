@@ -146,6 +146,7 @@ def NMTCriterion(vocabSize):
 def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None, D=None, optimizerD=None, eval=False):
     # compute generations one piece at a time
     loss = 0
+    errD, errG, D_x, D_G_z1, D_G_z2 = 0, 0, 0, 0, 0
     outputs = Variable(outputs.data, requires_grad=(not eval), volatile=eval).contiguous()
 
     batch_size = outputs.size(1)
@@ -281,16 +282,11 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
             errG = criterion(output, label)
 
             errG.backward()
-            outputs.backward(grad_output)
+            grad_output = None if outputs.grad is None else outputs.grad.data
 
-            # print('ITERATION: ')
-            # for p in G.parameters():
-            #     print('p.grad.data: ' + str(p.grad.data))
             D_G_z2 = output.data.mean()
-            optimizerG.step()
 
-
-    return loss, grad_output
+    return loss, grad_output, errD, errG, D_x, D_G_z1, D_G_z2
 
 def one_hot(G, input, num_input_symbols):
     one_hot_tensor = torch.FloatTensor(input.size()[1], input.size()[0], num_input_symbols)
@@ -367,7 +363,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
             sources = batch[0]
 
             if opt.supervision:
-                loss, gradOutput = memoryEfficientLoss(G, outputs,
+                loss, gradOutput, _, _, _, _, _ = memoryEfficientLoss(G, outputs,
                                                        sources, targets,
                                                        criterion)
 
@@ -403,10 +399,29 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
 
             else:
-                loss, gradOutput = memoryEfficientLoss(G, outputs, sources,
+                _, gradOutput, errD, errG, D_x, D_G_z1, D_G_z2 = memoryEfficientLoss(G, outputs, sources,
                                                        targets, criterion,
                                                        optimizerG, D,
                                                        optimizerD)
+
+                outputs.backward(gradOutput)
+
+                # print('ITERATION: ')
+                # for p in G.parameters():
+                #     print('p.grad.data: ' + str(p.grad.data))
+
+                optimizerG.step()
+
+                if i % opt.log_interval == 0 and i > 0:
+                    print('[%d/%d][%d/%d] Loss_D: %.4f Loss_G: %.4f D(x): %.4f D(G(z)): %.4f / %.4f'
+                            % (epoch, opt.epochs, i, len(trainData),
+                               errD.data[0], errG.data[0], D_x, D_G_z1, D_G_z2))
+                    if opt.use_gumbel:
+                        if opt.estimate_temp:
+                            learned_temp = G.generator.learned_temp
+                        else:
+                            learned_temp = G.generator.scheduled_temp
+                        print("Real temp: %.4f, Generated temp: %.4f " % (G.generator.real_temp, learned_temp))
 
 
                 # anneal tau for gumbel

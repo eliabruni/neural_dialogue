@@ -153,7 +153,7 @@ class GANGenerator(nn.Module):
         self.eps = 1e-20
         self.real_temp = 1
         if not self.opt.estimate_temp:
-            self.tau0 = 4  # initial temperature
+            self.tau0 = 1  # initial temperature
             self.scheduled_temp = self.tau0
             self.ANNEAL_RATE = 0.00003
             self.MIN_TEMP = 0.5
