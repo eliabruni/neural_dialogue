@@ -42,7 +42,7 @@ parser.add_argument('-gumbel_anneal_interval', type=int, default=1000,
                     help="""Temperature annealing interval for gumbel. -1 to switch
                          off the annealing""")
 ## D options
-parser.add_argument('-D_rnn_size', type=int, default=500,
+parser.add_argument('-D_rnn_size', type=int, default=10,
                     help='D: Size fo LSTM hidden states')
 parser.add_argument('-D_dropout', type=float, default=0.3,
                     help='Dropout probability; applied between LSTM stacks.')
@@ -52,9 +52,9 @@ parser.add_argument('-D_dropout', type=float, default=0.3,
 
 parser.add_argument('-layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
-parser.add_argument('-rnn_size', type=int, default=500,
+parser.add_argument('-rnn_size', type=int, default=10,
                     help='Size of LSTM hidden states')
-parser.add_argument('-word_vec_size', type=int, default=500,
+parser.add_argument('-word_vec_size', type=int, default=10,
                     help='Word embedding sizes')
 parser.add_argument('-input_feed', type=int, default=1,
                     help="""Feed the context vector at each time step as
@@ -333,7 +333,8 @@ def lev_dist(source, target):
 
 def log_predictions(pred_t, targ_t, distances):
     pred_t_data = pred_t.data.cpu().numpy()
-    argmaxed_preds = np.argmax(pred_t_data, axis=1)
+    # argmaxed_preds = np.argmax(pred_t_data, axis=1)
+    argmaxed_preds = np.argmax(pred_t_data, axis=0)
     argmax_preds_sorted = np.ones((opt.batch_size,argmaxed_preds.size/opt.batch_size ))
     cnt=0
     for i in range(0, argmaxed_preds.size, opt.batch_size):
