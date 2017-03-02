@@ -151,7 +151,7 @@ class GANGenerator(nn.Module):
 
         super(GANGenerator, self).__init__()
         self.eps = 1e-20
-        self.real_temp = 1
+        self.real_temp = 0.5
         if not self.opt.estimate_temp:
             self.tau0 = 1  # initial temperature
             self.scheduled_temp = self.tau0
@@ -208,7 +208,7 @@ class GANGenerator(nn.Module):
                 if self.opt.brnn:
                     h1 = hidden[1].view(self.opt.layers * self.opt.batch_size * self.opt.rnn_size)
                     h = torch.cat([h, h1], 0)
-                temp_estim = self.temp_estimator(h.unsqueeze(0)) + 1
+                temp_estim = self.temp_estimator(h.unsqueeze(0)) + 0.5
                 self.learned_temp = temp_estim.data[0][0]
 
             # sample gumbel noise; temp_estim=None in case we don't estimate
