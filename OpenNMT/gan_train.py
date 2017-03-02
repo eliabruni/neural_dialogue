@@ -412,7 +412,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
             batchIdx = batchOrder[i] if epoch >= opt.curriculum else i
             batch = trainData[batchIdx]
-            batch = [x.transpose(0, 1) for x in batch] # must be batch first for gather/scatter in DataParallel
+            # batch = [x.transpose(0, 1) for x in batch] # must be batch first for gather/scatter in DataParallel
 
             G.zero_grad()
             outputs, dec_hidden = G(batch)
