@@ -144,6 +144,7 @@ def eval(model, criterion, data):
         batch = [x.transpose(0, 1) for x in data[i]] # must be batch first for gather/scatter in DataParallel
         outputs = model(batch)  # FIXME volatile
         targets = batch[1][:, 1:]  # exclude <s> from targets
+
         loss, _ = memoryEfficientLoss(
                 outputs, targets, model.generator, criterion, eval=True)
         total_loss += loss
@@ -181,6 +182,7 @@ def trainModel(model, trainData, validData, dataset, optim):
             model.zero_grad()
             outputs = model(batch)
             targets = batch[1][:, 1:]  # exclude <s> from targets
+
             loss, gradOutput = memoryEfficientLoss(
                     outputs, targets, model.generator, criterion)
 
