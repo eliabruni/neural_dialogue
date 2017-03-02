@@ -323,7 +323,8 @@ def eval(G, criterion, data):
         sources = batch[0]
         loss, _, _, _, _, _, _ = memoryEfficientLoss(G, outputs,
                                                      sources, targets,
-                                                    criterion)
+                                                    criterion,None,None,None,True)
+        # (G, outputs, sources, targets, criterion, optimizerG = None, D = None, optimizerD = None, eval = False)
         # loss, _ = memoryEfficientLoss(G, outputs, sources, targets, criterion, eval=False)
         total_loss += loss
         total_words += targets.data.ne(onmt.Constants.PAD).sum()
