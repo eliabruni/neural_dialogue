@@ -167,9 +167,6 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
         else:
             pred_t = outputs
             targ_t = targets.contiguous()
-            print('pred_t: ' + str(pred_t))
-            print('targ_t: ' + str(targ_t))
-            print('targ_t.view(-1): ' + str(targ_t.view(-1)))
             loss_t = criterion(pred_t, targ_t.view(-1))
             loss += loss_t.data[0]
             if not eval:
@@ -349,6 +346,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
         criterion = NMTCriterion(dataset['dicts']['tgt'].size())
     else:
         criterion = nn.BCELoss()
+    ppl_eval_criterion = NMTCriterion(dataset['dicts']['tgt'].size())
 
     start_time = time.time()
     def trainEpoch(epoch):
@@ -451,7 +449,8 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
         print('Train perplexity: %g' % math.exp(min(train_loss, 100)))
 
         #  (2) evaluate on the validation set
-        valid_loss = eval(G, criterion, validData)
+
+        valid_loss = eval(G, ppl_eval_criterion, validData)
         valid_ppl = math.exp(min(valid_loss, 100))
         print('Validation perplexity: %g' % valid_ppl)
 
