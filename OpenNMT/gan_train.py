@@ -84,7 +84,7 @@ parser.add_argument('-param_init', type=float, default=0.1,
                     with support (-param_init, param_init)""")
 parser.add_argument('-optim', default='adam',
                     help="Optimization method. [sgd|adagrad|adadelta|adam|rmsprop]")
-parser.add_argument('-learning_rate', type=float, default=2e-5,
+parser.add_argument('-learning_rate', type=float, default=2e-4,
                     help="""Starting learning rate. If adagrad/adadelta/adam/rmsprop is
                     used, then this is the global learning rate. Recommended
                     settings: sgd = 1, adagrad = 0.1, adadelta = 1, adam = 0.1""")
@@ -584,14 +584,15 @@ def main():
             for p in D.parameters():
                 p.data.uniform_(-opt.param_init, opt.param_init)
 
-            optimizerG = optim.RMSprop(G.parameters(), lr=5e-5)
-            optimizerD = optim.RMSprop(D.parameters(), lr=5e-5)
-
-            # optimizerD = onmt.Optim(
-            #     G.parameters(), opt.optim, opt.learning_rate, opt.max_grad_norm,
-            #     lr_decay=opt.learning_rate_decay,
-            #     start_decay_at=opt.start_decay_at
-            # )
+            if opt.wasser:
+                optimizerG = optim.RMSprop(G.parameters(), lr=5e-5)
+                optimizerD = optim.RMSprop(D.parameters(), lr=5e-5)
+            else:
+                optimizerD = onmt.Optim(
+                    G.parameters(), opt.optim, opt.learning_rate, opt.max_grad_norm,
+                    lr_decay=opt.learning_rate_decay,
+                    start_decay_at=opt.start_decay_at
+                )
 
             if opt.cuda:
                 D.cuda()
