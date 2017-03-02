@@ -49,11 +49,11 @@ parser.add_argument('-D_dropout', type=float, default=0.3,
 
 ## Model options
 
-parser.add_argument('-layers', type=int, default=1,
+parser.add_argument('-layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
-parser.add_argument('-rnn_size', type=int, default=5,
+parser.add_argument('-rnn_size', type=int, default=500,
                     help='Size of LSTM hidden states')
-parser.add_argument('-word_vec_size', type=int, default=5,
+parser.add_argument('-word_vec_size', type=int, default=500,
                     help='Word embedding sizes')
 parser.add_argument('-input_feed', type=int, default=1,
                     help="""Feed the context vector at each time step as
@@ -371,9 +371,9 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
                 outputs.backward(gradOutput)
 
-                print('ITERATION: ')
-                for p in G.parameters():
-                    print('p.grad.data: ' + str(p.grad.data))
+                # print('ITERATION: ')
+                # for p in G.parameters():
+                #     print('p.grad.data: ' + str(p.grad.data))
 
                 # update the parameters
                 grad_norm = optimizerG.step()
