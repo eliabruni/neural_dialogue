@@ -226,6 +226,8 @@ class NMTModel(nn.Module):
         self.decoder = decoder
         self.generator = generator
         self.generate = False
+        self.log = {}
+        self.log['distances'] = []
 
     def set_generate(self, enabled):
         self.generate = enabled
