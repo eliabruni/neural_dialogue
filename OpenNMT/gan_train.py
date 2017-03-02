@@ -150,7 +150,7 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
     outputs = Variable(outputs.data, requires_grad=(not eval), volatile=eval).contiguous()
 
     batch_size = outputs.size(1)
-    if opt.supervision:
+    if opt.supervision or eval:
 
         # Legacy code, can be used with -geneare False option
         if not opt.generate:
@@ -311,21 +311,24 @@ def one_hot(G, input, num_input_symbols):
     one_hot_tensor = torch.transpose(one_hot_tensor,1,0)
     return Variable(one_hot_tensor.contiguous().view(one_hot_tensor.size()[0]*one_hot_tensor.size()[1], one_hot_tensor.size()[2]))
 
-def eval(model, criterion, data):
+def eval(G, criterion, data):
     total_loss = 0
     total_words = 0
 
-    model.eval()
+    G.eval()
     for i in range(len(data)):
         batch = [x.transpose(0, 1) for x in data[i]] # must be batch first for gather/scatter in DataParallel
-        outputs, dec_hidden = model(batch)  # FIXME volatile
+        outputs, dec_hidden = G(batch)  # FIXME volatile
         targets = batch[1][:, 1:]  # exclude <s> from targets
         sources = batch[0]
-        loss, _ = memoryEfficientLoss(model, outputs, sources, targets, criterion, eval=False)
+        loss, _, _, _, _, _, _ = memoryEfficientLoss(G, outputs,
+                                                     sources, targets,
+                                                    criterion)
+        # loss, _ = memoryEfficientLoss(G, outputs, sources, targets, criterion, eval=False)
         total_loss += loss
         total_words += targets.data.ne(onmt.Constants.PAD).sum()
 
-    model.train()
+    G.train()
     return total_loss / total_words
 
 
