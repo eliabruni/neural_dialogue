@@ -258,6 +258,7 @@ class NMTModel(nn.Module):
         if self.generate:
             out = out.contiguous()
             out = out.view(-1, out.size(2))
+            # if estimate temp, then we need to pass the hidden states of the decoder too
             if self.generator.opt.estimate_temp:
                 out = self.generator(out, dec_hidden)
             else:

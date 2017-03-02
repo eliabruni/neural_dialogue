@@ -71,7 +71,7 @@ parser.add_argument('-brnn_merge', default='concat',
 
 parser.add_argument('-batch_size', type=int, default=64,
                     help='Maximum batch size')
-parser.add_argument('-max_generator_batches', type=int, default=32,
+parser.add_argument('-max_generator_batches', type=int, default=64,
                     help="""Maximum batches of words in a sequence to run
                     the generator on in parallel. Higher is faster, but uses
                     more memory.""")
@@ -118,16 +118,24 @@ parser.add_argument('-gpus', default=[], nargs='+', type=int,
 
 parser.add_argument('-log_interval', type=int, default=50,
                     help="Print stats at this interval.")
-# parser.add_argument('-seed', type=int, default=3435,
-#                     help="Seed for random initialization")
+parser.add_argument('-seed', type=int, default=1111,
+                    help="Seed for random initialization")
 
 opt = parser.parse_args()
+
+# Set the random seed manually for reproducibility.
+torch.manual_seed(opt.seed)
+if torch.cuda.is_available():
+    if not opt.cuda:
+        print("WARNING: You have a CUDA device, so you should probably run with -cuda")
+    else:
+        torch.cuda.manual_seed(opt.seed)
+
+
 opt.cuda = len(opt.gpus)
 
 print(opt)
 
-if torch.cuda.is_available() and not opt.cuda:
-    print("WARNING: You have a CUDA device, so you should probably run with -cuda")
 
 if opt.cuda:
     cuda.set_device(opt.gpus[0])
