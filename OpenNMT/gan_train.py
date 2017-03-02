@@ -228,14 +228,8 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
 
             errG.backward()
             grad_output = None if outputs.grad is None else outputs.grad.data
-            outputs.backward(grad_output)
-
-            print('ITERATION: ')
-            for p in G.parameters():
-                print('p.grad.data: ' + str(p.grad.data))
 
             D_G_z2 = D_fake.data.mean()
-            optimizerG.step()
 
         else:
 
