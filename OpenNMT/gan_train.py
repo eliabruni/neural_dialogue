@@ -42,7 +42,7 @@ parser.add_argument('-gumbel_anneal_interval', type=int, default=1000,
                     help="""Temperature annealing interval for gumbel. -1 to switch
                          off the annealing""")
 ## D options
-parser.add_argument('-D_rnn_size', type=int, default=1000,
+parser.add_argument('-D_rnn_size', type=int, default=500,
                     help='D: Size fo LSTM hidden states')
 parser.add_argument('-D_dropout', type=float, default=0.3,
                     help='Dropout probability; applied between LSTM stacks.')
@@ -598,18 +598,12 @@ def main():
             for p in D.parameters():
                 p.data.uniform_(-opt.param_init, opt.param_init)
 
-            optimizerG = optim.RMSprop(G.parameters(), lr=5e-5)
-            optimizerD = optim.RMSprop(D.parameters(), lr=5e-5)
-            # if opt.wasser:
-            #
-            # else:
-            #     optimizerG = optim.Adam(G.parameters(), lr=5e-5)
-            #     optimizerD = optim.Adam(D.parameters(), lr=5e-5)
-                # optimizerD = onmt.Optim(
-                #     G.parameters(), opt.optim, opt.learning_rate, opt.max_grad_norm,
-                #     lr_decay=opt.learning_rate_decay,
-                #     start_decay_at=opt.start_decay_at
-                # )
+            # optimizerG = optim.RMSprop(G.parameters(), lr=5e-5)
+            # optimizerD = optim.RMSprop(D.parameters(), lr=5e-5)
+
+            optimizerG = optim.Adam(G.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
+            optimizerD = optim.Adam(D.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
+
 
             if opt.cuda:
                 D.cuda()

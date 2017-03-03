@@ -133,12 +133,13 @@ class TempEstimator(nn.Module):
             self.linear1 = nn.Linear(opt.rnn_size*opt.layers*opt.batch_size*2, 1)
         else:
             self.linear1 = nn.Linear(opt.rnn_size * opt.layers * opt.batch_size, 1)
-        self.softplus = nn.Softplus()
-        # self.softplus = nn.ReLU()
+        # self.softplus = nn.Softplus()
+        self.relu = nn.ReLU()
 
     def forward(self, input):
         out = self.linear1(input)
-        temp = self.softplus(out)
+        # temp = self.softplus(out)
+        temp = self.relu(out)
 
         return temp
 
@@ -161,8 +162,7 @@ class GANGenerator(nn.Module):
             self.temp_estimator = TempEstimator(self.opt)
             self.learned_temp = 0
         self.linear = nn.Linear(opt.rnn_size, self.dicts.size())
-        # self.logsoftmax = nn.LogSoftmax()
-        self.softmax = nn.Softmax()
+        self.logsoftmax = nn.LogSoftmax()
 
 
     def anneal_tau_temp(self):
@@ -186,8 +186,7 @@ class GANGenerator(nn.Module):
         x = (input + noise)
         x = x / self.real_temp
         # x = x * self.real_temp
-        # x = F.log_softmax(x)
-        x = F.softmax(x)
+        x = F.log_softmax(x)
         return x.view_as(input)
 
     def sampler(self, input, temp_estim=None):
@@ -217,8 +216,7 @@ class GANGenerator(nn.Module):
 
             # sample gumbel noise; temp_estim=None in case we don't estimate
             out = self.sampler(out,temp_estim)
-        # out = self.logsoftmax(out)
-        out = self.softmax(out)
+        out = self.logsoftmax(out)
 
         return out
 
