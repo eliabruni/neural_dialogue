@@ -417,8 +417,6 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
                     errG.backward()
 
-                    grad_output = None if outputs.grad is None else outputs.grad.data
-
                     D_G_z2 = D_fake.data.mean()
 
                     outputs.backward(gradOutput)

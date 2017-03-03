@@ -162,7 +162,6 @@ class GANGenerator(nn.Module):
             self.temp_estimator = TempEstimator(self.opt)
             self.learned_temp = 0
         self.linear = nn.Linear(opt.rnn_size, self.dicts.size())
-        # self.logsoftmax = nn.LogSoftmax()
 
 
     def anneal_tau_temp(self):
@@ -186,7 +185,6 @@ class GANGenerator(nn.Module):
         x = (input + noise)
         x = x / self.real_temp
         # x = x * self.real_temp
-        # x = F.log_softmax(x)
         return x.view_as(input)
 
     def sampler(self, input, temp_estim=None):
@@ -216,7 +214,6 @@ class GANGenerator(nn.Module):
 
             # sample gumbel noise; temp_estim=None in case we don't estimate
             out = self.sampler(out,temp_estim)
-        # out = self.logsoftmax(out)
 
         return out
 
@@ -280,7 +277,6 @@ class D(nn.Module):
         self.rnn1 = nn.LSTM(self.rnn_size, self.rnn_size, 1, bidirectional=True, dropout=opt.D_dropout)
         self.attn = onmt.modules.GlobalAttention(self.rnn_size*2)
         self.l_out = nn.Linear(self.rnn_size * 2, 1)
-        # self.sigmoid = nn.Sigmoid()
         if not self.opt.wasser:
             self.sigmoid = nn.Sigmoid()
 
@@ -304,7 +300,6 @@ class D(nn.Module):
         assert diff == 0
         out, attn = self.attn(hn2,torch.transpose(outputs,1,0))
         out = self.l_out(out)
-        # out = self.sigmoid(out)
         if not self.opt.wasser:
             out = self.sigmoid(out)
 
