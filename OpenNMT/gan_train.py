@@ -42,7 +42,7 @@ parser.add_argument('-gumbel_anneal_interval', type=int, default=1000,
                     help="""Temperature annealing interval for gumbel. -1 to switch
                          off the annealing""")
 ## D options
-parser.add_argument('-D_rnn_size', type=int, default=500,
+parser.add_argument('-D_rnn_size', type=int, default=1500,
                     help='D: Size fo LSTM hidden states')
 parser.add_argument('-D_dropout', type=float, default=0.3,
                     help='Dropout probability; applied between LSTM stacks.')
@@ -50,9 +50,9 @@ parser.add_argument('-D_dropout', type=float, default=0.3,
 ## Model options
 parser.add_argument('-layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
-parser.add_argument('-rnn_size', type=int, default=500,
+parser.add_argument('-rnn_size', type=int, default=200,
                     help='Size of LSTM hidden states')
-parser.add_argument('-word_vec_size', type=int, default=501,
+parser.add_argument('-word_vec_size', type=int, default=200,
                     help='Word embedding sizes')
 parser.add_argument('-input_feed', type=int, default=1,
                     help="""Feed the context vector at each time step as
@@ -289,8 +289,6 @@ def eval(G, criterion, data):
                                                      sources, targets,
                                                     criterion,None,None,None,False,True)
 
-        # (G, outputs, sources, targets, criterion, optimizerG = None, D = None, optimizerD = None, eval = False)
-        # loss, _ = memoryEfficientLoss(G, outputs, sources, targets, criterion, eval=False)
         total_loss += loss
         total_words += targets.data.ne(onmt.Constants.PAD).sum()
 
@@ -412,9 +410,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     errG = -torch.mean(D_fake)
 
                     errG.backward()
-                    # print('ITERATION2: ')
-                    # for p in D.parameters():
-                    #     print('p.grad.data: ' + str(p.grad.data))
+
                     grad_output = None if outputs.grad is None else outputs.grad.data
 
                     D_G_z2 = D_fake.data.mean()
@@ -450,10 +446,6 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     errD_real = criterion(output, label)
                     errD_real.backward()
                     D_x = output.data.mean()
-
-                    # print('ITERATION1: ')
-                    # for p in D.parameters():
-                    #     print('p.grad.data: ' + str(p.grad.data))
 
                     # train with fake
                     label.data.fill_(fake_label)
