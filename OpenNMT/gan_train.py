@@ -42,7 +42,7 @@ parser.add_argument('-gumbel_anneal_interval', type=int, default=1000,
                     help="""Temperature annealing interval for gumbel. -1 to switch
                          off the annealing""")
 ## D options
-parser.add_argument('-D_rnn_size', type=int, default=500,
+parser.add_argument('-D_rnn_size', type=int, default=900,
                     help='D: Size fo LSTM hidden states')
 parser.add_argument('-D_dropout', type=float, default=0.3,
                     help='Dropout probability; applied between LSTM stacks.')
@@ -73,7 +73,7 @@ parser.add_argument('-max_generator_batches', type=int, default=64,
                     help="""Maximum batches of words in a sequence to run
                     the generator on in parallel. Higher is faster, but uses
                     more memory.""")
-parser.add_argument('-epochs', type=int, default=900,
+parser.add_argument('-epochs', type=int, default=500,
                     help='Number of training epochs')
 parser.add_argument('-start_epoch', type=int, default=1,
                     help='The epoch from which to start')
