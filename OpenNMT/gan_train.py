@@ -43,7 +43,7 @@ parser.add_argument('-gumbel_anneal_interval', type=int, default=1000,
                     help="""Temperature annealing interval for gumbel. -1 to switch
                          off the annealing""")
 ## D options
-parser.add_argument('-D_rnn_size', type=int, default=1500,
+parser.add_argument('-D_rnn_size', type=int, default=2000,
                     help='D: Size fo LSTM hidden states')
 parser.add_argument('-D_dropout', type=float, default=0.3,
                     help='Dropout probability; applied between LSTM stacks.')
