@@ -82,6 +82,7 @@ parser.add_argument('-param_init', type=float, default=0.1,
                     with support (-param_init, param_init)""")
 parser.add_argument('-optim', default='adam',
                     help="Optimization method. [sgd|adagrad|adadelta|adam|rmsprop]")
+parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
 parser.add_argument('-learning_rate', type=float, default=2e-4,
                     help="""Starting learning rate. If adagrad/adadelta/adam/rmsprop is
                     used, then this is the global learning rate. Recommended
