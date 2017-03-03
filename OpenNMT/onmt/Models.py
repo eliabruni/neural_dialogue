@@ -216,7 +216,7 @@ class GANGenerator(nn.Module):
 
             # sample gumbel noise; temp_estim=None in case we don't estimate
             out = self.sampler(out,temp_estim)
-        out = self.logsoftmax(out)
+        # out = self.logsoftmax(out)
 
         return out
 
