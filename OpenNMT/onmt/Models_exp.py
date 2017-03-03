@@ -162,7 +162,7 @@ class GANGenerator(nn.Module):
             self.learned_temp = 0
         self.linear = nn.Linear(opt.rnn_size, self.dicts.size())
         # self.logsoftmax = nn.LogSoftmax()
-        self.softmax = nn.Softmax()
+        # self.softmax = nn.Softmax()
 
 
     def anneal_tau_temp(self):
@@ -187,7 +187,7 @@ class GANGenerator(nn.Module):
         x = x / self.real_temp
         # x = x * self.real_temp
         # x = F.log_softmax(x)
-        x = F.softmax(x)
+        # x = F.softmax(x)
         return x.view_as(input)
 
     def sampler(self, input, temp_estim=None):
@@ -218,7 +218,7 @@ class GANGenerator(nn.Module):
             # sample gumbel noise; temp_estim=None in case we don't estimate
             out = self.sampler(out,temp_estim)
         # out = self.logsoftmax(out)
-        out = self.softmax(out)
+        # out = self.softmax(out)
 
         return out
 
