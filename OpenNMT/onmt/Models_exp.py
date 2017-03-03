@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 import onmt.modules
+import torch.nn.functional as F
+import numpy as np
 
 class Encoder(nn.Module):
 
@@ -46,16 +48,17 @@ class StackedLSTM(nn.Module):
         super(StackedLSTM, self).__init__()
         self.dropout = nn.Dropout(dropout)
         self.num_layers = num_layers
-        self.layers = nn.ModuleList()
 
         for i in range(num_layers):
-            self.layers.append(nn.LSTMCell(input_size, rnn_size))
+            layer = nn.LSTMCell(input_size, rnn_size)
+            self.add_module('layer_%d' % i, layer)
             input_size = rnn_size
 
     def forward(self, input, hidden):
         h_0, c_0 = hidden
         h_1, c_1 = [], []
-        for i, layer in enumerate(self.layers):
+        for i in range(self.num_layers):
+            layer = getattr(self, 'layer_%d' % i)
             h_1_i, c_1_i = layer(input, (h_0[i], c_0[i]))
             input = h_1_i
             if i != self.num_layers:
@@ -109,7 +112,7 @@ class Decoder(nn.Module):
         # self.input_feed=False
         outputs = []
         output = init_output
-        for i, emb_t in enumerate(emb.split(1)):
+        for i, emb_t in enumerate(emb.chunk(emb.size(0), dim=0)):
             emb_t = emb_t.squeeze(0)
             if self.input_feed:
                 emb_t = torch.cat([emb_t, output], 1)
@@ -123,6 +126,103 @@ class Decoder(nn.Module):
         return outputs.transpose(0, 1), hidden, attn
 
 
+class TempEstimator(nn.Module):
+    def __init__(self, opt):
+        super(TempEstimator, self).__init__()
+        if opt.brnn:
+            self.linear1 = nn.Linear(opt.rnn_size*opt.layers*opt.batch_size*2, 1)
+        else:
+            self.linear1 = nn.Linear(opt.rnn_size * opt.layers * opt.batch_size, 1)
+        self.softplus = nn.Softplus()
+        # self.softplus = nn.ReLU()
+
+    def forward(self, input):
+        out = self.linear1(input)
+        temp = self.softplus(out)
+
+        return temp
+
+class GANGenerator(nn.Module):
+
+    def __init__(self, opt, dicts):
+        self.opt = opt
+        self.dicts = dicts
+        self.iter_cnt = 0 # retains the overall number of trin iterations
+
+        super(GANGenerator, self).__init__()
+        self.eps = 1e-20
+        self.real_temp = 0.5
+        if not self.opt.estimate_temp:
+            self.tau0 = 1  # initial temperature
+            self.scheduled_temp = self.tau0
+            self.ANNEAL_RATE = 0.00003
+            self.MIN_TEMP = 0.5
+        else:
+            self.temp_estimator = TempEstimator(self.opt)
+            self.learned_temp = 0
+        self.linear = nn.Linear(opt.rnn_size, self.dicts.size())
+        # self.logsoftmax = nn.LogSoftmax()
+        self.softmax = nn.Softmax()
+
+
+    def anneal_tau_temp(self):
+        # Anneal temperature tau
+        self.scheduled_temp = np.maximum(self.tau0 *
+                                      np.exp(-self.ANNEAL_RATE * self.iter_cnt * self.opt.batch_size),
+                                      self.MIN_TEMP)
+        print('Temperature annealed to: ' + str(self.scheduled_temp))
+
+    def get_noise(self, input):
+        noise = torch.rand(input.size())
+        if self.opt.cuda:
+            noise = noise.cuda()
+        noise.add_(self.eps).log_().neg_()
+        noise.add_(self.eps).log_().neg_()
+        noise = Variable(noise)
+        return noise
+
+    def real_sampler(self, input):
+        noise = self.get_noise(input)
+        x = (input + noise)
+        x = x / self.real_temp
+        # x = x * self.real_temp
+        # x = F.log_softmax(x)
+        x = F.softmax(x)
+        return x.view_as(input)
+
+    def sampler(self, input, temp_estim=None):
+        noise = self.get_noise(input)
+        x = (input + noise)
+
+        if temp_estim:
+            # x = x * temp_estim.repeat(x.size())
+            x = x / temp_estim.repeat(x.size())
+        else:
+            # x = x * self.scheduled_temp
+            x = x / self.scheduled_temp
+        return x.view_as(input)
+
+    def forward(self, input, hidden=None):
+        out = self.linear(input)
+        if self.opt.use_gumbel:
+            temp_estim = None
+            if self.opt.estimate_temp:
+                # let's estimate the temperature for the gumbel noise
+                h = hidden[0].view(self.opt.layers * self.opt.batch_size * self.opt.rnn_size)
+                if self.opt.brnn:
+                    h1 = hidden[1].view(self.opt.layers * self.opt.batch_size * self.opt.rnn_size)
+                    h = torch.cat([h, h1], 0)
+                temp_estim = self.temp_estimator(h.unsqueeze(0)) + 0.5
+                self.learned_temp = temp_estim.data[0][0]
+
+            # sample gumbel noise; temp_estim=None in case we don't estimate
+            out = self.sampler(out,temp_estim)
+        # out = self.logsoftmax(out)
+        out = self.softmax(out)
+
+        return out
+
+
 class NMTModel(nn.Module):
 
     def __init__(self, encoder, decoder, generator):
@@ -131,6 +231,8 @@ class NMTModel(nn.Module):
         self.decoder = decoder
         self.generator = generator
         self.generate = False
+        self.log = {}
+        self.log['distances'] = []
 
     def set_generate(self, enabled):
         self.generate = enabled
@@ -161,6 +263,51 @@ class NMTModel(nn.Module):
 
         out, dec_hidden, _attn = self.decoder(tgt, enc_hidden, context, init_output)
         if self.generate:
-            out = self.generator(out)
+            out = out.contiguous()
+            out = out.view(-1, out.size(2))
+            # if estimate temp, then we need to pass the hidden states of the decoder too
+            if self.generator.opt.estimate_temp:
+                out = self.generator(out, dec_hidden)
+            else:
+                out = self.generator(out)
+        return out, dec_hidden
+
+class D(nn.Module):
+    def __init__(self, opt, dicts):
+        self.opt = opt
+        self.vocab_size = dicts.size()
+        self.rnn_size = opt.D_rnn_size
+        super(D, self).__init__()
+        self.onehot_embedding = nn.Linear(self.vocab_size, self.rnn_size)
+        self.rnn1 = nn.LSTM(self.rnn_size, self.rnn_size, 1, bidirectional=True, dropout=opt.D_dropout)
+        self.attn = onmt.modules.GlobalAttention(self.rnn_size*2)
+        self.l_out = nn.Linear(self.rnn_size * 2, 1)
+        # self.sigmoid = nn.Sigmoid()
+        if not self.opt.wasser:
+            self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+
+        onehot_embeds = self.onehot_embedding(x.contiguous().view(x.size()[0]*x.size()[1], x.size()[2]))
+        onehot_embeds = onehot_embeds.view(x.size()[0], x.size()[1], onehot_embeds.size()[1])
+
+        _batch_size = onehot_embeds.size(1)
+        h = Variable(torch.zeros(1 * 2, _batch_size, self.rnn_size))
+        if self.opt.cuda:
+            h = h.cuda()
+        c = Variable(torch.zeros(1 * 2, _batch_size, self.rnn_size))
+        if self.opt.cuda:
+            c = c.cuda()
+        outputs, (hn,_) = self.rnn1(onehot_embeds, (h, c))
+
+        hn1 = hn.transpose(0, 1).contiguous().view(_batch_size, -1)
+        hn2 = torch.cat([hn[0], hn[1]], 1)
+        diff = (hn1 - hn2).norm().data[0]
+        assert diff == 0
+        out, attn = self.attn(hn2,torch.transpose(outputs,1,0))
+        out = self.l_out(out)
+        # out = self.sigmoid(out)
+        if not self.opt.wasser:
+            out = self.sigmoid(out)
 
         return out
