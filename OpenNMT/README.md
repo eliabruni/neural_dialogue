@@ -64,8 +64,8 @@ With default parameters on a single Maxwell GPU, this version runs about 70% fas
 
 2) Train the model.
 
-NO ST:
-```python train.py -data data/demo-train.pt -batch_size 64 -use_gumbel True -estimate_temp True -cuda```
+### Supervision mode
+```python train.py -data data/demo-train.pt -supervision True  -cuda```
 
-WITH ST:
-```python train.py -data data/demo-train.pt -batch_size 64 -use_gumbel True -estimate_temp True -ST True -cuda```
+### GAN mode
+```python train.py -data data/demo-train.pt -use_gumbel True -estimate_temp True -input_feed 0 -cuda```

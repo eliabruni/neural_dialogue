@@ -9,7 +9,6 @@ import time
 from torch import optim
 import numba
 import numpy as np
-import torch.nn.functional as F
 
 parser = argparse.ArgumentParser(description='train.py')
 
@@ -161,14 +160,12 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
 
                 out_t = out_t.view(-1, out_t.size(2))
                 pred_t = G.generator(out_t)
-                pred_t = F.log_softmax(pred_t)
                 loss_t = criterion(pred_t, targ_t.view(-1))
                 loss += loss_t.data[0]
                 if not eval:
                     loss_t.div(batch_size).backward()
         else:
             pred_t = outputs
-            pred_t = F.log_softmax(pred_t)
             targ_t = targets.contiguous()
             loss_t = criterion(pred_t, targ_t.view(-1))
             loss += loss_t.data[0]
@@ -178,7 +175,6 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
         grad_output = None if outputs.grad is None else outputs.grad.data
 
     else:
-        outputs = F.softmax(outputs)
         targets = torch.transpose(targets, 1, 0)
         sources = torch.transpose(sources, 1, 0)
         if log_pred:
@@ -221,7 +217,6 @@ def one_hot(G, input, num_input_symbols):
             y_onehot.scatter_(1, input[i].unsqueeze(1), num_input_symbols)
             # Use soft gumbel-softmax
             pert = G.generator.real_sampler(Variable(y_onehot))
-            pert = F.softmax(pert)
             one_hot_tensor[i] = pert.data
 
     one_hot_tensor = torch.transpose(one_hot_tensor,1,0)

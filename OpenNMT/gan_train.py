@@ -43,7 +43,7 @@ parser.add_argument('-gumbel_anneal_interval', type=int, default=1000,
                     help="""Temperature annealing interval for gumbel. -1 to switch
                          off the annealing""")
 ## D options
-parser.add_argument('-D_rnn_size', type=int, default=500,
+parser.add_argument('-D_rnn_size', type=int, default=200,
                     help='D: Size fo LSTM hidden states')
 parser.add_argument('-D_dropout', type=float, default=0.3,
                     help='Dropout probability; applied between LSTM stacks.')
@@ -51,9 +51,9 @@ parser.add_argument('-D_dropout', type=float, default=0.3,
 ## Model options
 parser.add_argument('-layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
-parser.add_argument('-rnn_size', type=int, default=500,
+parser.add_argument('-rnn_size', type=int, default=200,
                     help='Size of LSTM hidden states')
-parser.add_argument('-word_vec_size', type=int, default=500,
+parser.add_argument('-word_vec_size', type=int, default=200,
                     help='Word embedding sizes')
 parser.add_argument('-input_feed', type=int, default=1,
                     help="""Feed the context vector at each time step as
@@ -180,8 +180,8 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
 
     else:
         outputs = F.log_softmax(outputs)
-        targets = torch.transpose(targets, 1, 0)
         sources = torch.transpose(sources, 1, 0)
+        targets = torch.transpose(targets, 1, 0)
         if log_pred:
             log_predictions(outputs, targets, G.log['distances'])
 
@@ -207,6 +207,7 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
 def one_hot(G, input, num_input_symbols):
     one_hot_tensor = torch.FloatTensor(input.size()[1], input.size()[0], num_input_symbols)
     input = torch.transpose(input, 1, 0)
+    # print('input: ' + str(input))
     for i in range(input.size()[0]):
         # One hot encoding buffer that you create out of the loop and just keep reusing
         y_onehot = torch.FloatTensor(input.size()[1], num_input_symbols)
@@ -219,7 +220,8 @@ def one_hot(G, input, num_input_symbols):
             # Use ST gumbel-softmax
             one_hot_tensor[i] = y_onehot
         else:
-            y_onehot.scatter_(1, input[i].unsqueeze(1), num_input_symbols)
+            y_onehot.scatter_(1, input[i].unsqueeze(1), 5)
+            # print('y_onehot: ' + str(y_onehot))
             # Use soft gumbel-softmax
             pert = G.generator.real_sampler(Variable(y_onehot))
             pert = F.log_softmax(pert)
@@ -304,9 +306,10 @@ def eval(G, criterion, data):
 
 def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=None):
     print(G)
-    print(D)
     G.train()
-    D.train()
+    if not opt.supervision:
+        print(D)
+        D.train()
     # if optimizerG.last_ppl is None:
     #     for p in G.parameters():
     #         p.data.uniform_(-opt.param_init, opt.param_init)
@@ -603,11 +606,11 @@ def main():
             for p in D.parameters():
                 p.data.uniform_(-opt.param_init, opt.param_init)
 
-            optimizerG = optim.RMSprop(G.parameters(), lr=5e-5)
-            optimizerD = optim.RMSprop(D.parameters(), lr=5e-5)
+            # optimizerG = optim.RMSprop(G.parameters(), lr=5e-5)
+            # optimizerD = optim.RMSprop(D.parameters(), lr=5e-5)
             #
-            # optimizerG = optim.Adam(G.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
-            # optimizerD = optim.Adam(D.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
+            optimizerG = optim.Adam(G.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
+            optimizerD = optim.Adam(D.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
 
 
             if opt.cuda:
