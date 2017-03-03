@@ -43,7 +43,7 @@ parser.add_argument('-gumbel_anneal_interval', type=int, default=1000,
                     help="""Temperature annealing interval for gumbel. -1 to switch
                          off the annealing""")
 ## D options
-parser.add_argument('-D_rnn_size', type=int, default=1000,
+parser.add_argument('-D_rnn_size', type=int, default=1500,
                     help='D: Size fo LSTM hidden states')
 parser.add_argument('-D_dropout', type=float, default=0.3,
                     help='Dropout probability; applied between LSTM stacks.')
@@ -51,9 +51,9 @@ parser.add_argument('-D_dropout', type=float, default=0.3,
 ## Model options
 parser.add_argument('-layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
-parser.add_argument('-rnn_size', type=int, default=200,
+parser.add_argument('-rnn_size', type=int, default=100,
                     help='Size of LSTM hidden states')
-parser.add_argument('-word_vec_size', type=int, default=200,
+parser.add_argument('-word_vec_size', type=int, default=100,
                     help='Word embedding sizes')
 parser.add_argument('-input_feed', type=int, default=1,
                     help="""Feed the context vector at each time step as
@@ -179,7 +179,7 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
         grad_output = None if outputs.grad is None else outputs.grad.data
 
     else:
-        outputs = F.softmax(outputs)
+        outputs = F.log_softmax(outputs)
         targets = torch.transpose(targets, 1, 0)
         sources = torch.transpose(sources, 1, 0)
         if log_pred:
@@ -222,7 +222,7 @@ def one_hot(G, input, num_input_symbols):
             y_onehot.scatter_(1, input[i].unsqueeze(1), num_input_symbols)
             # Use soft gumbel-softmax
             pert = G.generator.real_sampler(Variable(y_onehot))
-            pert = F.softmax(pert)
+            pert = F.log_softmax(pert)
             one_hot_tensor[i] = pert.data
 
     one_hot_tensor = torch.transpose(one_hot_tensor,1,0)
