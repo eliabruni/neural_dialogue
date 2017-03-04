@@ -179,7 +179,8 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
         grad_output = None if outputs.grad is None else outputs.grad.data
 
     else:
-        outputs = F.log_softmax(outputs)
+        # outputs = F.log_softmax(outputs)
+        outputs = F.softmax(outputs)
         sources = torch.transpose(sources, 1, 0)
         targets = torch.transpose(targets, 1, 0)
         if log_pred:
@@ -224,7 +225,8 @@ def one_hot(G, input, num_input_symbols):
             # print('y_onehot: ' + str(y_onehot))
             # Use soft gumbel-softmax
             pert = G.generator.real_sampler(Variable(y_onehot))
-            pert = F.log_softmax(pert)
+            # pert = F.log_softmax(pert)
+            pert = F.softmax(pert)
             one_hot_tensor[i] = pert.data
 
     one_hot_tensor = torch.transpose(one_hot_tensor,1,0)
