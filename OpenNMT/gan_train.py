@@ -50,11 +50,11 @@ parser.add_argument('-D_dropout', type=float, default=0.3,
 
 ## Model options
 
-parser.add_argument('-layers', type=int, default=2,
+parser.add_argument('-layers', type=int, default=500,
                     help='Number of layers in the LSTM encoder/decoder')
 parser.add_argument('-rnn_size', type=int, default=500,
                     help='Size of LSTM hidden states')
-parser.add_argument('-word_vec_size', type=int, default=500,
+parser.add_argument('-word_vec_size', type=int, default=10,
                     help='Word embedding sizes')
 parser.add_argument('-input_feed', type=int, default=1,
                     help="""Feed the context vector at each time step as
@@ -75,7 +75,7 @@ parser.add_argument('-max_generator_batches', type=int, default=64,
                     help="""Maximum batches of words in a sequence to run
                     the generator on in parallel. Higher is faster, but uses
                     more memory.""")
-parser.add_argument('-epochs', type=int, default=1000,
+parser.add_argument('-epochs', type=int, default=500,
                     help='Number of training epochs')
 parser.add_argument('-start_epoch', type=int, default=1,
                     help='The epoch from which to start')
@@ -177,8 +177,10 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
         grad_output = None if outputs.grad is None else outputs.grad.data
 
     else:
-
+        targets = torch.transpose(targets, 1, 0)
+        sources = torch.transpose(sources, 1, 0)
         if log_pred:
+
             log_predictions(outputs, targets, G.log['distances'])
 
         noise_sources = one_hot(G, sources.data,
@@ -414,6 +416,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
             batch = [x.transpose(0, 1) for x in batch] # must be batch first for gather/scatter in DataParallel
 
             G.zero_grad()
+
             outputs, dec_hidden = G(batch)
             targets = batch[1][:, 1:]  # exclude <s> from targets
             sources = batch[0]
