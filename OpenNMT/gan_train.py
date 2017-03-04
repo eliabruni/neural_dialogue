@@ -593,13 +593,11 @@ def main():
         for p in G.parameters():
             p.data.uniform_(-opt.param_init, opt.param_init)
 
-        optimizerG = optim.Adam(G.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
-
-        # optimizerG = onmt.Optim(
-        #     G.parameters(), opt.optim, opt.learning_rate, opt.max_grad_norm,
-        #     lr_decay=opt.learning_rate_decay,
-        #     start_decay_at=opt.start_decay_at
-        # )
+        optimizerG = onmt.Optim(
+            G.parameters(), opt.optim, opt.learning_rate, opt.max_grad_norm,
+            lr_decay=opt.learning_rate_decay,
+            start_decay_at=opt.start_decay_at
+        )
         D=None
         optimizerD=None
         if not opt.supervision:
@@ -610,11 +608,11 @@ def main():
             for p in D.parameters():
                 p.data.uniform_(-opt.param_init, opt.param_init)
 
-            # optimizerG = optim.RMSprop(G.parameters(), lr=5e-5)
-            # optimizerD = optim.RMSprop(D.parameters(), lr=5e-5)
+            optimizerG = optim.RMSprop(G.parameters(), lr=5e-5)
+            optimizerD = optim.RMSprop(D.parameters(), lr=5e-5)
             #
-            optimizerG = optim.Adam(G.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
-            optimizerD = optim.Adam(D.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
+            # optimizerG = optim.Adam(G.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
+            # optimizerD = optim.Adam(D.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
 
 
             if opt.cuda:
