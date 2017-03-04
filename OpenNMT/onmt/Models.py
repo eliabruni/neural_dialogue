@@ -154,7 +154,7 @@ class GANGenerator(nn.Module):
         self.eps = 1e-20
         self.real_temp = 0.5
         if not self.opt.estimate_temp:
-            self.tau0 = 1  # initial temperature
+            self.tau0 = 0.5  # initial temperature
             self.scheduled_temp = self.tau0
             self.ANNEAL_RATE = 0.00003
             self.MIN_TEMP = 0.5
@@ -162,6 +162,8 @@ class GANGenerator(nn.Module):
             self.temp_estimator = TempEstimator(self.opt)
             self.learned_temp = 0
         self.linear = nn.Linear(opt.rnn_size, self.dicts.size())
+        self.logsoftmax = nn.log_softmax()
+
 
 
     def anneal_tau_temp(self):
@@ -184,7 +186,9 @@ class GANGenerator(nn.Module):
         noise = self.get_noise(input)
         x = (input + noise)
         x = x / self.real_temp
+        # x = x / self.learned_temp
         # x = x * self.real_temp
+        x = F.log_softmax(x)
         return x.view_as(input)
 
     def sampler(self, input, temp_estim=None):
@@ -214,6 +218,7 @@ class GANGenerator(nn.Module):
 
             # sample gumbel noise; temp_estim=None in case we don't estimate
             out = self.sampler(out,temp_estim)
+        out = self.logsoftmax(out)
 
         return out
 
