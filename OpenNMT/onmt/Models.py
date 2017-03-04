@@ -133,13 +133,13 @@ class TempEstimator(nn.Module):
             self.linear1 = nn.Linear(opt.rnn_size*opt.layers*opt.batch_size*2, 1)
         else:
             self.linear1 = nn.Linear(opt.rnn_size * opt.layers * opt.batch_size, 1)
-        # self.softplus = nn.Softplus()
-        self.relu = nn.ReLU()
+        self.softplus = nn.Softplus()
+        # self.relu = nn.ReLU()
 
     def forward(self, input):
         out = self.linear1(input)
-        # temp = self.softplus(out)
-        temp = self.relu(out)
+        temp = self.softplus(out)
+        # temp = self.relu(out)
 
         return temp
 
@@ -154,7 +154,7 @@ class GANGenerator(nn.Module):
         self.eps = 1e-20
         self.real_temp = 0.5
         if not self.opt.estimate_temp:
-            self.tau0 = 0.5  # initial temperature
+            self.tau0 = 1  # initial temperature
             self.scheduled_temp = self.tau0
             self.ANNEAL_RATE = 0.00003
             self.MIN_TEMP = 0.5
@@ -183,8 +183,7 @@ class GANGenerator(nn.Module):
     def real_sampler(self, input):
         noise = self.get_noise(input)
         x = (input + noise)
-        # x = x / self.real_temp
-        x = x / self.learned_temp
+        x = x / self.real_temp
         # x = x * self.real_temp
         return x.view_as(input)
 
