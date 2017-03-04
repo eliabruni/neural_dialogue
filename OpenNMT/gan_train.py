@@ -181,6 +181,7 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
     else:
         # outputs = F.log_softmax(outputs)
         outputs = F.softmax(outputs)
+        outputs = Variable(outputs.data, requires_grad=(not eval), volatile=eval).contiguous()
         sources = torch.transpose(sources, 1, 0)
         targets = torch.transpose(targets, 1, 0)
         if log_pred:
@@ -488,9 +489,9 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
                     outputs.backward(gradOutput)
 
-                    print('ITERATION: ')
-                    for p in G.parameters():
-                        print('p.grad.data: ' + str(p.grad.data))
+                    # print('ITERATION: ')
+                    # for p in G.parameters():
+                    #     print('p.grad.data: ' + str(p.grad.data))
 
                     optimizerG.step()
 
