@@ -488,9 +488,9 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
                     outputs.backward(gradOutput)
 
-                    # print('ITERATION: ')
-                    # for p in G.parameters():
-                    #     print('p.grad.data: ' + str(p.grad.data))
+                    print('ITERATION: ')
+                    for p in G.parameters():
+                        print('p.grad.data: ' + str(p.grad.data))
 
                     optimizerG.step()
 
