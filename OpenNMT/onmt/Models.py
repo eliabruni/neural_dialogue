@@ -183,7 +183,8 @@ class GANGenerator(nn.Module):
     def real_sampler(self, input):
         noise = self.get_noise(input)
         x = (input + noise)
-        x = x / self.real_temp
+        # x = x / self.real_temp
+        x = x / self.learned_temp
         # x = x * self.real_temp
         return x.view_as(input)
 
