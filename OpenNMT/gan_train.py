@@ -182,15 +182,16 @@ def memoryEfficientLoss(G, outputs, sources, targets, criterion, optimizerG=None
         # outputs = F.log_softmax(outputs)
         # outputs = F.softmax(outputs)
         outputs = Variable(outputs.data, requires_grad=(not eval), volatile=eval).contiguous()
-        sources = torch.transpose(sources, 1, 0)
-        targets = torch.transpose(targets, 1, 0)
-        if log_pred:
-            log_predictions(outputs, targets, G.log['distances'])
+
 
         noise_sources = one_hot(G, sources.data,
                                 opt.unievrsalVocabSize)
         noise_targets = one_hot(G, targets.data,
                                 opt.unievrsalVocabSize)
+        sources = torch.transpose(sources, 1, 0)
+        targets = torch.transpose(targets, 1, 0)
+        if log_pred:
+            log_predictions(outputs, targets, G.log['distances'])
 
         if opt.cuda:
             noise_sources = noise_sources.cuda()
@@ -483,7 +484,6 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     errG = criterion(output, label)
 
                     errG.backward()
-                    grad_output = None if outputs.grad is None else outputs.grad.data
 
                     D_G_z2 = output.data.mean()
 
