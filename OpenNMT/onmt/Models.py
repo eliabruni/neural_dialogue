@@ -162,7 +162,7 @@ class GANGenerator(nn.Module):
             self.temp_estimator = TempEstimator(self.opt)
             self.learned_temp = 0
         self.linear = nn.Linear(opt.rnn_size, self.dicts.size())
-        self.logsoftmax = nn.log_softmax()
+        self.logsoftmax = nn.LogSoftmax()
 
 
 
