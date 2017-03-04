@@ -134,12 +134,11 @@ class TempEstimator(nn.Module):
         else:
             self.linear1 = nn.Linear(opt.rnn_size * opt.layers * opt.batch_size, 1)
         self.softplus = nn.Softplus()
-        # self.relu = nn.ReLU()
+        # self.softplus = nn.ReLU()
 
     def forward(self, input):
         out = self.linear1(input)
         temp = self.softplus(out)
-        # temp = self.relu(out)
 
         return temp
 
@@ -152,9 +151,9 @@ class GANGenerator(nn.Module):
 
         super(GANGenerator, self).__init__()
         self.eps = 1e-20
-        self.real_temp = 0.5
+        self.real_temp = 1
         if not self.opt.estimate_temp:
-            self.tau0 = 0.5  # initial temperature
+            self.tau0 = 1  # initial temperature
             self.scheduled_temp = self.tau0
             self.ANNEAL_RATE = 0.00003
             self.MIN_TEMP = 0.5
@@ -163,7 +162,6 @@ class GANGenerator(nn.Module):
             self.learned_temp = 0
         self.linear = nn.Linear(opt.rnn_size, self.dicts.size())
         self.logsoftmax = nn.LogSoftmax()
-
 
 
     def anneal_tau_temp(self):
@@ -185,9 +183,7 @@ class GANGenerator(nn.Module):
     def real_sampler(self, input):
         noise = self.get_noise(input)
         x = (input + noise)
-        x = x / self.real_temp
-        # x = x / self.learned_temp
-        # x = x * self.real_temp
+        x = x * self.real_temp
         x = F.log_softmax(x)
         return x.view_as(input)
 
@@ -196,11 +192,10 @@ class GANGenerator(nn.Module):
         x = (input + noise)
 
         if temp_estim:
-            # x = x * temp_estim.repeat(x.size())
-            x = x / temp_estim.repeat(x.size())
+            x = x * temp_estim.repeat(x.size())
         else:
-            # x = x * self.scheduled_temp
-            x = x / self.scheduled_temp
+            x = x * self.scheduled_temp
+        # x = F.softmax(x)
         return x.view_as(input)
 
     def forward(self, input, hidden=None):
@@ -213,7 +208,7 @@ class GANGenerator(nn.Module):
                 if self.opt.brnn:
                     h1 = hidden[1].view(self.opt.layers * self.opt.batch_size * self.opt.rnn_size)
                     h = torch.cat([h, h1], 0)
-                temp_estim = self.temp_estimator(h.unsqueeze(0)) + 0.5
+                temp_estim = self.temp_estimator(h.unsqueeze(0)) + 1
                 self.learned_temp = temp_estim.data[0][0]
 
             # sample gumbel noise; temp_estim=None in case we don't estimate
@@ -231,8 +226,6 @@ class NMTModel(nn.Module):
         self.decoder = decoder
         self.generator = generator
         self.generate = False
-        self.log = {}
-        self.log['distances'] = []
 
     def set_generate(self, enabled):
         self.generate = enabled
@@ -282,6 +275,7 @@ class D(nn.Module):
         self.rnn1 = nn.LSTM(self.rnn_size, self.rnn_size, 1, bidirectional=True, dropout=opt.D_dropout)
         self.attn = onmt.modules.GlobalAttention(self.rnn_size*2)
         self.l_out = nn.Linear(self.rnn_size * 2, 1)
+        # self.sigmoid = nn.Sigmoid()
         if not self.opt.wasser:
             self.sigmoid = nn.Sigmoid()
 
@@ -305,6 +299,7 @@ class D(nn.Module):
         assert diff == 0
         out, attn = self.attn(hn2,torch.transpose(outputs,1,0))
         out = self.l_out(out)
+        # out = self.sigmoid(out)
         if not self.opt.wasser:
             out = self.sigmoid(out)
 
