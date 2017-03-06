@@ -149,7 +149,6 @@ class G(nn.Module):
         self.generator = generator
         self.temp_estimator = temp_estimator
         self.generate = False
-        self.gumbel = False
         self.tau0 = 1 # initial temperature
         self.eps = 1e-20
         self.temperature = self.tau0
@@ -161,7 +160,7 @@ class G(nn.Module):
         self.generate = enabled
 
     def set_gumbel(self, enabled):
-        self.gumbel = enabled
+        self.opt.use_gumbel = enabled
 
     def set_tau(self, val):
         self.tau = val
