@@ -37,7 +37,7 @@ parser.add_argument('-rnn_size', type=int, default=10,
                     help='Size of LSTM hidden states')
 parser.add_argument('-word_vec_size', type=int, default=10,
                     help='Word embedding sizes')
-parser.add_argument('-input_feed', type=int, default=1,
+parser.add_argument('-input_feed', type=int, default=0,
                     help="""Feed the context vector at each time step as
                     additional input (via concatenation with the word
                     embeddings) to the decoder.""")
