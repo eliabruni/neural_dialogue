@@ -288,12 +288,11 @@ def eval(G, criterion, data, dataset):
         targets = batch[1][1:]  # exclude <s> from targets
         _, _, loss, _,  = memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, False, True)
 
-
         total_loss += loss
         total_words += targets.data.ne(onmt.Constants.PAD).sum()
 
     G.train()
-    G.set_gumbel(True)
+    # G.set_gumbel(True)
 
     return total_loss / total_words
 
