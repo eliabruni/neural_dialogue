@@ -278,6 +278,9 @@ def eval(G, criterion, data, dataset):
     total_words = 0
 
     G.eval()
+
+    # Deactivate gumbel softmax for ppl evaluation
+    G.set_gumbel(False)
     for i in range(len(data)):
         batch = data[i] # must be batch first for gather/scatter in DataParallel
         outputs = G(batch)
@@ -290,6 +293,8 @@ def eval(G, criterion, data, dataset):
         total_words += targets.data.ne(onmt.Constants.PAD).sum()
 
     G.train()
+    G.set_gumbel(True)
+
     return total_loss / total_words
 
 def trainModel(G, D, trainData, validData, dataset, optimizerG, optimizerD):
