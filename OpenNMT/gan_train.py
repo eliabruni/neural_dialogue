@@ -280,7 +280,7 @@ def eval(G, criterion, data, dataset):
     G.eval()
 
     # Deactivate gumbel softmax for ppl evaluation
-    G.set_gumbel(False)
+    # G.set_gumbel(False)
     for i in range(len(data)):
         batch = data[i] # must be batch first for gather/scatter in DataParallel
         outputs = G(batch)
