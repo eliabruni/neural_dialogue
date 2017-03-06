@@ -246,7 +246,6 @@ class G(nn.Module):
                 else:
                     out = self.estim_sampler(out)
             else:
-                out = self.generator(out)
                 return out.view(input.size(0), -1)
                 # out = F.softmax(out.view(input.size(0), -1))
 
