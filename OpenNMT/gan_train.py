@@ -278,9 +278,6 @@ def eval(G, criterion, data, dataset):
     total_words = 0
 
     G.eval()
-
-    # Deactivate gumbel softmax for ppl evaluation
-    # G.set_gumbel(False)
     for i in range(len(data)):
         batch = data[i] # must be batch first for gather/scatter in DataParallel
         outputs = G(batch)
@@ -288,12 +285,11 @@ def eval(G, criterion, data, dataset):
         targets = batch[1][1:]  # exclude <s> from targets
         _, _, loss, _,  = memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, False, True)
 
+
         total_loss += loss
         total_words += targets.data.ne(onmt.Constants.PAD).sum()
 
     G.train()
-    # G.set_gumbel(True)
-
     return total_loss / total_words
 
 def trainModel(G, D, trainData, validData, dataset, optimizerG, optimizerD):
@@ -491,6 +487,7 @@ def main():
         else:
             optimizerG = optim.Adam(G.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
             optimizerD = optim.Adam(D.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
+
 
     else:
         logger.info('Loading from checkpoint at %s' % opt.train_from)
