@@ -27,9 +27,9 @@ parser.add_argument('-train_from',
 ## G options
 parser.add_argument('-layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
-parser.add_argument('-rnn_size', type=int, default=500,
+parser.add_argument('-rnn_size', type=int, default=200,
                     help='Size of LSTM hidden states')
-parser.add_argument('-word_vec_size', type=int, default=500,
+parser.add_argument('-word_vec_size', type=int, default=200,
                     help='Word embedding sizes')
 parser.add_argument('-input_feed', type=int, default=1,
                     help="""Feed the context vector at each time step as
@@ -55,7 +55,7 @@ parser.add_argument('-estimate_temp', type=bool, default=False,
                     help='Use automatic estimation of temperature annealing for gumbel')
 
 ## D options
-parser.add_argument('-D_rnn_size', type=int, default=500,
+parser.add_argument('-D_rnn_size', type=int, default=100,
                     help='D: Size fo LSTM hidden states')
 
 ## G Optimization options
@@ -63,7 +63,7 @@ parser.add_argument('--clip', type=float, default=0.5,
                     help='gradient clipping')
 parser.add_argument('-batch_size', type=int, default=1,
                     help='Maximum batch size')
-parser.add_argument('-max_generator_batches', type=int, default=32,
+parser.add_argument('-max_generator_batches', type=int, default=64,
                     help="""Maximum batches of words in a sequence to run
                     the generator on in parallel. Higher is faster, but uses
                     more memory.""")
@@ -77,7 +77,7 @@ parser.add_argument('-param_init', type=float, default=0.1,
 parser.add_argument('-optim', default='sgd',
                     help="Optimization method. [sgd|adagrad|adadelta|adam]")
 parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
-parser.add_argument('-learning_rate', type=float, default=2e-4,
+parser.add_argument('-learning_rate', type=float, default=2e-5,
                     help="""Starting learning rate. If adagrad/adadelta/adam is
                     used, then this is the global learning rate. Recommended
                     settings: sgd = 1, adagrad = 0.1, adadelta = 1, adam = 0.1""")
@@ -131,52 +131,24 @@ if torch.cuda.is_available():
 def getBatch(outputs, dec_hidden, sources, targets, G, dataset, log_pred=False, eval=False):
     # compute generations one piece at a time
 
-    if opt.estimate_temp:
-        # let's estimate the temperature for the gumbel noise
-        h = dec_hidden[0].view(G.opt.layers * G.opt.batch_size * opt.rnn_size)
-        if G.opt.brnn:
-            h1 = dec_hidden[1].view(G.opt.layers * G.opt.batch_size * opt.rnn_size)
-            h = torch.cat([h,h1],0)
-        temp_estim = G.temp_estimator(h.unsqueeze(0))
-        temp_estim = temp_estim + 0.5
-        G.temperature = temp_estim.data[0][0]
+    pred_t = outputs
 
-        temp_estim_gen = Variable(temp_estim.data, requires_grad=(not eval), volatile=eval)
+    if log_pred:
+        log_predictions(pred_t, targets, G.log['distances'])
 
-    outputs = Variable(outputs.data, requires_grad=(not eval), volatile=eval)
+    noise_sources = one_hot(G, sources.data,
+                                 dataset['dicts']['src'].size())
+    noise_targets = one_hot(G, targets.data,
+                                 dataset['dicts']['tgt'].size())
 
-    sources_split = torch.split(sources, opt.max_generator_batches)
-    outputs_split = torch.split(outputs, opt.max_generator_batches)
-    targets_split = torch.split(targets, opt.max_generator_batches)
-    for src_t, out_t, targ_t in zip(sources_split, outputs_split, targets_split):
-        out_t = out_t.view(-1, out_t.size(2))
-        out_t = G.generator(out_t)
-        if opt.use_gumbel:
-            if opt.estimate_temp:
-                pred_t = G.estim_sampler(out_t, temp_estim_gen)
-            else:
-                pred_t = G.sampler(out_t)
-        else:
-            pred_t = F.log_softmax(out_t)
+    if opt.cuda:
+        noise_sources = noise_sources.cuda()
+        noise_targets = noise_targets.cuda()
+        pred_t = pred_t.cuda()
+    fake = torch.cat([noise_sources, pred_t], 0)
+    real = torch.cat([noise_sources,noise_targets],0)
 
-        if log_pred:
-            log_predictions(pred_t, targ_t, G.log['distances'])
-
-        noise_sources = one_hot(G, src_t.data,
-                                     dataset['dicts']['src'].size())
-        noise_targets = one_hot(G, targ_t.data,
-                                     dataset['dicts']['tgt'].size())
-
-        if opt.cuda:
-            noise_sources = noise_sources.cuda()
-            noise_targets = noise_targets.cuda()
-            pred_t = pred_t.cuda()
-        fake = torch.cat([noise_sources, pred_t], 0)
-        real = torch.cat([noise_sources,noise_targets],0)
-
-    grad_output = None if outputs.grad is None else outputs.grad.data
-    return fake, real, grad_output
-    # return pred_t, noise_targets, grad_output
+    return fake, real
 
 
 def lev_dist(source, target):
@@ -294,7 +266,7 @@ def trainModel(G, D, trainData, validData, dataset, optimizerG, optimizerD):
             sources = batch[0]
             targets = batch[1][1:]  # exclude <s> from targets
             log_pred = i % (opt.log_interval) == 0 and i > 0
-            fake, real, gradOutput = getBatch(
+            fake, real = getBatch(
                     outputs, dec_hidden, sources, targets, G, dataset, log_pred)
 
             fake = fake.contiguous().view(fake.size()[0]/opt.batch_size,opt.batch_size,fake.size()[1])
@@ -339,16 +311,9 @@ def trainModel(G, D, trainData, validData, dataset, optimizerG, optimizerD):
             errG = criterion(output, label)
 
             errG.backward()
-            outputs.backward(gradOutput)
-            # print('')
-            # print('G grads:')
             # print('ITERATION: ')
             # for p in G.parameters():
             #     print('p.grad.data: ' + str(p.grad.data))
-            # print('XXXXXXXXX')
-            # print('XXXXXXXXX')
-            # print('XXXXXXXXX')
-            # print('XXXXXXXXX')
             D_G_z2 = output.data.mean()
             optimizerG.step()
 
@@ -403,18 +368,7 @@ def main():
         else:
             G = onmt.Models.G(opt, encoder, decoder, generator)
         D = onmt.Models.D(opt, dicts['tgt'])
-
-        # optimizerG = onmt.Optim(
-        #     G.parameters(), opt.optim, 1, opt.max_grad_norm,
-        #     lr_decay=0.5,
-        #     start_decay_at=opt.start_decay_at
-        # )
-        #
-        # optimizerD = onmt.Optim(
-        #     D.parameters(), opt.optim, 1, opt.max_grad_norm,
-        #     lr_decay=0.5,
-        #     start_decay_at=opt.start_decay_at
-        # )
+        G.set_generate(True)
 
         optimizerG = optim.Adam(G.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
         optimizerD = optim.Adam(D.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))

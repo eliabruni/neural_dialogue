@@ -127,11 +127,11 @@ class TempEstimator(nn.Module):
             self.linear1 = nn.Linear(opt.rnn_size*opt.layers*opt.batch_size*2, 1)
         else:
             self.linear1 = nn.Linear(opt.rnn_size * opt.layers * opt.batch_size, 1)
-        self.relu = nn.ReLU()
+        self.softplus = nn.Softplus()
 
     def forward(self, input):
         out = self.linear1(input)
-        temp = self.relu(out)
+        temp = self.softplus(out)
 
         return temp
 
@@ -192,32 +192,16 @@ class G(nn.Module):
         noise = Variable(noise)
         return noise
 
-    def estim_sampler(self, input, temp_estim):
+    def estim_sampler(self, input, temp_estim=None):
         noise = self.get_noise(input)
-
         x = (input + noise)
 
-        expander1 = Variable(torch.ones(x.size()[0]), requires_grad=True).unsqueeze(1)
-        if self.opt.cuda:
-            expander1 = expander1.cuda()
-        temp_estim = F.linear(expander1, temp_estim)
-        if len(x.size()) > 1:
-            expander2 = Variable(torch.ones(x.size()[1]), requires_grad=True).unsqueeze(0)
-            if self.opt.cuda:
-                expander2 = expander2.cuda()
-            temp_estim = F.linear(temp_estim, torch.transpose(expander2, 1, 0))
-
-        x = x / temp_estim
-        x = F.softmax(x)
-        if self.opt.ST:
-            # Use ST gumbel-softmax
-            y_onehot = torch.FloatTensor(x.size())
-            y_onehot.zero_()
-            max, idx = torch.max(x, 1)
-            y_onehot.scatter_(1, idx.data, 1)
-            return Variable(y_onehot).detach()
+        if temp_estim:
+            x = x / temp_estim.repeat(x.size())
         else:
-            return x.view_as(input)
+            x = x / self.scheduled_temp
+        x = F.softmax(x)
+        return x.view_as(input)
 
     def sampler(self, input):
         noise = self.get_noise(input)
@@ -246,12 +230,20 @@ class G(nn.Module):
 
         out, dec_hidden, _attn = self.decoder(tgt, enc_hidden, context, init_output)
         if self.generate:
-            if self.gumbel:
+            if self.opt.use_gumbel:
+                out = out.view(-1, out.size(2))
                 out = self.generator(out)
-                out = self.sampler(out)
+                h = dec_hidden[0].view(self.opt.layers * self.opt.batch_size * self.opt.rnn_size)
+                if self.opt.brnn:
+                    h1 = dec_hidden[1].view(self.opt.layers * self.opt.batch_size * self.opt.rnn_size)
+                    h = torch.cat([h, h1], 0)
+                temp_estim = self.temp_estimator(h.unsqueeze(0))
+                temp_estim = temp_estim + 0.5
+                self.temperature = temp_estim.data[0][0]
+                out = self.estim_sampler(out, temp_estim)
             else:
                 out = self.generator(out)
-                out = F.log_softmax(out.view(input.size(0), -1))
+                out = F.softmax(out.view(input.size(0), -1))
 
         return out, dec_hidden
 
