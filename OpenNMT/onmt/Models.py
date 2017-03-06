@@ -231,9 +231,9 @@ class G(nn.Module):
 
         out, dec_hidden, _attn = self.decoder(tgt, enc_hidden, context, init_output)
         if self.generate:
+            out = out.view(-1, out.size(2))
+            out = self.generator(out)
             if self.opt.use_gumbel:
-                out = out.view(-1, out.size(2))
-                out = self.generator(out)
                 if self.opt.estimate_temp:
                     h = dec_hidden[0].view(self.opt.layers * self.opt.batch_size * self.opt.rnn_size)
                     if self.opt.brnn:
