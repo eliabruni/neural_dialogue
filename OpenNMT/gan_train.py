@@ -481,8 +481,12 @@ def main():
         D = onmt.Models.D(opt, dicts['tgt'])
         G.set_generate(True)
 
-        optimizerG = optim.Adam(G.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
-        optimizerD = optim.Adam(D.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
+        if opt.wasser:
+            optimizerG = optim.RMSprop(G.parameters(), lr=5e-5)
+            optimizerD = optim.RMSprop(D.parameters(), lr=5e-5)
+        else:
+            optimizerG = optim.Adam(G.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
+            optimizerD = optim.Adam(D.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
 
     else:
         logger.info('Loading from checkpoint at %s' % opt.train_from)

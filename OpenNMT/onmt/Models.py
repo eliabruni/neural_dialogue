@@ -127,13 +127,13 @@ class TempEstimator(nn.Module):
             self.linear1 = nn.Linear(opt.rnn_size*opt.layers*opt.batch_size*2, 1)
         else:
             self.linear1 = nn.Linear(opt.rnn_size * opt.layers * opt.batch_size, 1)
-        self.relu = nn.ReLU()
-        # self.softplus = nn.Softplus()
+        # self.relu = nn.ReLU()
+        self.softplus = nn.Softplus()
 
     def forward(self, input):
         out = self.linear1(input)
-        temp = self.relu(out)
-        # temp = self.softplus(out)
+        # temp = self.relu(out)
+        temp = self.softplus(out)
 
         return temp
 
