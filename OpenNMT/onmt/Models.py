@@ -127,11 +127,13 @@ class TempEstimator(nn.Module):
             self.linear1 = nn.Linear(opt.rnn_size*opt.layers*opt.batch_size*2, 1)
         else:
             self.linear1 = nn.Linear(opt.rnn_size * opt.layers * opt.batch_size, 1)
-        self.softplus = nn.Softplus()
+        self.relu = nn.ReLU()
+        # self.softplus = nn.Softplus()
 
     def forward(self, input):
         out = self.linear1(input)
-        temp = self.softplus(out)
+        temp = self.relu(out)
+        # temp = self.softplus(out)
 
         return temp
 
@@ -199,14 +201,14 @@ class G(nn.Module):
         if temp_estim:
             x = x / temp_estim.repeat(x.size())
         else:
-            x = x / self.scheduled_temp
-        x = F.softmax(x)
+            x = x / self.temperature
+        # x = F.softmax(x)
         return x.view_as(input)
 
     def sampler(self, input):
         noise = self.get_noise(input)
         x = (input + noise) / self.temperature
-        x = F.softmax(x)
+        # x = F.softmax(x)
         if self.opt.ST:
             # Use ST gumbel-softmax
             y_onehot = torch.FloatTensor(x.size())
@@ -233,20 +235,23 @@ class G(nn.Module):
             if self.opt.use_gumbel:
                 out = out.view(-1, out.size(2))
                 out = self.generator(out)
-                h = dec_hidden[0].view(self.opt.layers * self.opt.batch_size * self.opt.rnn_size)
-                if self.opt.brnn:
-                    h1 = dec_hidden[1].view(self.opt.layers * self.opt.batch_size * self.opt.rnn_size)
-                    h = torch.cat([h, h1], 0)
-                temp_estim = self.temp_estimator(h.unsqueeze(0))
-                temp_estim = temp_estim + 0.5
-                self.temperature = temp_estim.data[0][0]
-                out = self.estim_sampler(out, temp_estim)
+                if self.opt.estimate_temp:
+                    h = dec_hidden[0].view(self.opt.layers * self.opt.batch_size * self.opt.rnn_size)
+                    if self.opt.brnn:
+                        h1 = dec_hidden[1].view(self.opt.layers * self.opt.batch_size * self.opt.rnn_size)
+                        h = torch.cat([h, h1], 0)
+                    temp_estim = self.temp_estimator(h.unsqueeze(0))
+                    temp_estim = temp_estim + 0.5
+                    self.temperature = temp_estim.data[0][0]
+                    out = self.estim_sampler(out, temp_estim)
+                else:
+                    out = self.estim_sampler(out)
             else:
                 out = self.generator(out)
-                out = F.softmax(out.view(input.size(0), -1))
+                return out.view(input.size(0), -1)
+                # out = F.softmax(out.view(input.size(0), -1))
 
-        return out, dec_hidden
-
+        return out
 
 class D(nn.Module):
     def __init__(self, opt, dicts):
@@ -258,6 +263,8 @@ class D(nn.Module):
         self.rnn1 = nn.LSTM(self.rnn_size, self.rnn_size, 1, bidirectional=True)
         self.attn = onmt.modules.GlobalAttention(self.rnn_size*2)
         self.l_out = nn.Linear(self.rnn_size * 2, 1)
+        if not self.opt.wasser:
+            self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
 
@@ -279,4 +286,6 @@ class D(nn.Module):
         assert diff == 0
         out, attn = self.attn(hn2,torch.transpose(outputs,1,0))
         out = self.l_out(out)
-        return F.sigmoid(out)
+        if not self.opt.wasser:
+            out = self.sigmoid(out)
+        return out

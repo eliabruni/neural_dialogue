@@ -24,12 +24,18 @@ parser.add_argument('-train_from',
                     help="""If training from a checkpoint then this is the
                     path to the pretrained model.""")
 
+# GAN options
+parser.add_argument('-supervision', type=bool, default=False,
+                    help='Whether to use supervision')
+parser.add_argument('-wasser', type=bool, default=False,
+                    help='Use wasserstein optimization')
+
 ## G options
 parser.add_argument('-layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
-parser.add_argument('-rnn_size', type=int, default=200,
+parser.add_argument('-rnn_size', type=int, default=10,
                     help='Size of LSTM hidden states')
-parser.add_argument('-word_vec_size', type=int, default=200,
+parser.add_argument('-word_vec_size', type=int, default=10,
                     help='Word embedding sizes')
 parser.add_argument('-input_feed', type=int, default=1,
                     help="""Feed the context vector at each time step as
@@ -55,13 +61,16 @@ parser.add_argument('-estimate_temp', type=bool, default=False,
                     help='Use automatic estimation of temperature annealing for gumbel')
 
 ## D options
-parser.add_argument('-D_rnn_size', type=int, default=100,
+parser.add_argument('-D_rnn_size', type=int, default=10,
                     help='D: Size fo LSTM hidden states')
+parser.add_argument('-D_dropout', type=float, default=0.3,
+                    help='Dropout probability; applied between LSTM stacks.')
+
 
 ## G Optimization options
 parser.add_argument('--clip', type=float, default=0.5,
                     help='gradient clipping')
-parser.add_argument('-batch_size', type=int, default=1,
+parser.add_argument('-batch_size', type=int, default=64,
                     help='Maximum batch size')
 parser.add_argument('-max_generator_batches', type=int, default=64,
                     help="""Maximum batches of words in a sequence to run
@@ -77,7 +86,7 @@ parser.add_argument('-param_init', type=float, default=0.1,
 parser.add_argument('-optim', default='sgd',
                     help="Optimization method. [sgd|adagrad|adadelta|adam]")
 parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
-parser.add_argument('-learning_rate', type=float, default=2e-5,
+parser.add_argument('-learning_rate', type=float, default=2e-4,
                     help="""Starting learning rate. If adagrad/adadelta/adam is
                     used, then this is the global learning rate. Recommended
                     settings: sgd = 1, adagrad = 0.1, adadelta = 1, adam = 0.1""")
@@ -128,27 +137,52 @@ if torch.cuda.is_available():
         torch.cuda.manual_seed(opt.seed)
 
 
-def getBatch(outputs, dec_hidden, sources, targets, G, dataset, log_pred=False, eval=False):
-    # compute generations one piece at a time
-
-    pred_t = outputs
-
-    if log_pred:
-        log_predictions(pred_t, targets, G.log['distances'])
-
-    noise_sources = one_hot(G, sources.data,
-                                 dataset['dicts']['src'].size())
-    noise_targets = one_hot(G, targets.data,
-                                 dataset['dicts']['tgt'].size())
-
+def NMTCriterion(vocabSize):
+    weight = torch.ones(vocabSize)
+    weight[onmt.Constants.PAD] = 0
+    crit = nn.NLLLoss(weight, size_average=False)
     if opt.cuda:
-        noise_sources = noise_sources.cuda()
-        noise_targets = noise_targets.cuda()
-        pred_t = pred_t.cuda()
-    fake = torch.cat([noise_sources, pred_t], 0)
-    real = torch.cat([noise_sources,noise_targets],0)
+        crit.cuda()
+    return crit
 
-    return fake, real
+def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, log_pred=False, eval=False):
+
+    grad_output = None
+    loss = 0
+    fake, real = None, None
+
+    if opt.supervision or eval:
+        pred_t = F.log_softmax(outputs)
+
+        if log_pred:
+            log_predictions(pred_t, targets, G.log['distances'])
+        targ_t = targets.contiguous()
+        loss_t = criterion(pred_t, targ_t.view(-1))
+        loss += loss_t.data[0]
+        if not eval:
+            loss_t.div(opt.batch_size).backward()
+
+        grad_output = None if outputs.grad is None else outputs.grad.data
+
+    else:
+        pred_t = F.softmax(outputs)
+
+        if log_pred:
+            log_predictions(pred_t, targets, G.log['distances'])
+
+        noise_sources = one_hot(G, sources.data,
+                                     dataset['dicts']['src'].size())
+        noise_targets = one_hot(G, targets.data,
+                                     dataset['dicts']['tgt'].size())
+
+        if opt.cuda:
+            noise_sources = noise_sources.cuda()
+            noise_targets = noise_targets.cuda()
+            pred_t = pred_t.cuda()
+        fake = torch.cat([noise_sources, pred_t], 0)
+        real = torch.cat([noise_sources,noise_targets],0)
+
+    return fake, real, loss, grad_output
 
 
 def lev_dist(source, target):
@@ -214,13 +248,16 @@ def one_hot(G, input, num_input_symbols, temp_estim=None):
         if opt.cuda:
             y_onehot = y_onehot.cuda()
         y_onehot.zero_()
-        y_onehot.scatter_(1, input[i].unsqueeze(1),5)
+
         if opt.ST:
             # Use ST gumbel-softmax
+            y_onehot.scatter_(1, input[i].unsqueeze(1), 1)
             one_hot_tensor[i] = y_onehot
         else:
             # Use soft gumbel-softmax
+            y_onehot.scatter_(1, input[i].unsqueeze(1), num_input_symbols)
             pert = G.sampler(Variable(y_onehot))
+            pert = F.softmax(pert)
             one_hot_tensor[i] = pert.data
 
     one_hot_tensor = torch.transpose(one_hot_tensor,1,0)
@@ -236,14 +273,35 @@ def clip_gradient(opt, model):
     totalnorm = math.sqrt(totalnorm)
     return min(1, opt.clip / (totalnorm + 1e-6))
 
+def eval(G, criterion, data, dataset):
+    total_loss = 0
+    total_words = 0
+
+    G.eval()
+    for i in range(len(data)):
+        batch = data[i] # must be batch first for gather/scatter in DataParallel
+        outputs = G(batch)
+        sources = batch[0]
+        targets = batch[1][1:]  # exclude <s> from targets
+        _, _, loss, _,  = memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, False, True)
+
+
+        total_loss += loss
+        total_words += targets.data.ne(onmt.Constants.PAD).sum()
+
+    G.train()
+    return total_loss / total_words
 
 def trainModel(G, D, trainData, validData, dataset, optimizerG, optimizerD):
     logger.info(G)
     logger.info(D)
     G.train()
+    D.train()
 
     # define criterion of each GPU
     criterion = nn.BCELoss()
+
+    ppl_eval_criterion = NMTCriterion(dataset['dicts']['tgt'].size())
 
     # GAN variables
     real_label = 1
@@ -262,60 +320,109 @@ def trainModel(G, D, trainData, validData, dataset, optimizerG, optimizerD):
             batchIdx = batchOrder[i] if epoch >= opt.curriculum else i
             batch = trainData[batchIdx]
 
-            outputs, dec_hidden = G(batch)
+            outputs = G(batch)
             sources = batch[0]
             targets = batch[1][1:]  # exclude <s> from targets
             log_pred = i % (opt.log_interval) == 0 and i > 0
-            fake, real = getBatch(
-                    outputs, dec_hidden, sources, targets, G, dataset, log_pred)
+            fake, real, _, _ = memoryEfficientLoss(
+                    G, outputs, sources, targets, dataset, None, log_pred)
 
             fake = fake.contiguous().view(fake.size()[0]/opt.batch_size,opt.batch_size,fake.size()[1])
             real = real.contiguous().view(real.size()[0]/opt.batch_size,opt.batch_size,real.size()[1])
 
-            ############################
-            # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
-            ###########################
-            D.zero_grad()
+            G_train_interval = 5
+            if opt.wasser:
+                ############################
+                # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
+                ###########################
+                D.zero_grad()
 
-            # train with real
-            output = D(real)
-            label = torch.FloatTensor(opt.batch_size)
-            if opt.cuda:
-                label = label.cuda()
-            label = Variable(label)
-            label.data.resize_(output.size()[0]).fill_(real_label)
-            label = label.unsqueeze(1)
+                # train with real
+                D_real = D(real)
+                D_x = D_real.data.mean()
 
-            errD_real = criterion(output, label)
-            errD_real.backward()
-            D_x = output.data.mean()
+                # train with fake
+                D_fake = D(fake.detach())
 
-            # train with fake
-            label.data.fill_(fake_label)
-            output = D(fake.detach())
-            errD_fake = criterion(output, label)
-            errD_fake.backward()
+                D_G_z1 = D_fake.data.mean()
 
-            D_G_z1 = output.data.mean()
-            errD = errD_real + errD_fake
+                errD = -(torch.mean(D_real) - torch.mean(D_fake))
+                errD.backward()
 
-            optimizerD.step()
+                optimizerD.step()
 
-            ############################
-            # (2) Update G network: maximize log(D(G(z)))
-            ###########################
-            G.zero_grad()
+                for p in D.parameters():
+                    p.data.clamp_(-0.01, 0.01)
 
-            label.data.fill_(real_label)  # fake labels are real for generator cost
-            output = D(fake)
-            errG = criterion(output, label)
+                if i % G_train_interval == 0:
 
-            errG.backward()
-            # print('ITERATION: ')
-            # for p in G.parameters():
-            #     print('p.grad.data: ' + str(p.grad.data))
-            D_G_z2 = output.data.mean()
-            optimizerG.step()
+                    # if i % G_train_interval == 0:
+                    ############################
+                    # (2) Update G network: maximize log(D(G(z)))
+                    ###########################
+                    G.zero_grad()
+
+                    D_fake = D(fake)
+                    errG = -torch.mean(D_fake)
+
+                    errG.backward()
+
+                    D_G_z2 = D_fake.data.mean()
+
+                    # print('ITERATION: ')
+                    # for p in G.parameters():
+                    #     print('p.grad.data: ' + str(p.grad.data))
+
+                    optimizerG.step()
+
+            else:
+                ############################
+                # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
+                ###########################
+                D.zero_grad()
+
+                # train with real
+                output = D(real)
+                label = torch.FloatTensor(opt.batch_size)
+                if opt.cuda:
+                    label = label.cuda()
+                label = Variable(label)
+                label.data.resize_(output.size()[0]).fill_(real_label)
+                label = label.unsqueeze(1)
+
+                errD_real = criterion(output, label)
+                errD_real.backward()
+                D_x = output.data.mean()
+
+                # train with fake
+                label.data.fill_(fake_label)
+                output = D(fake.detach())
+                errD_fake = criterion(output, label)
+                errD_fake.backward()
+
+                D_G_z1 = output.data.mean()
+                errD = errD_real + errD_fake
+
+                optimizerD.step()
+
+                ############################
+                # (2) Update G network: maximize log(D(G(z)))
+                ###########################
+                G.zero_grad()
+
+                label.data.fill_(real_label)  # fake labels are real for generator cost
+                output = D(fake)
+                errG = criterion(output, label)
+
+                errG.backward()
+
+                D_G_z2 = output.data.mean()
+
+                # print('ITERATION: ')
+                # for p in G.parameters():
+                #     print('p.grad.data: ' + str(p.grad.data))
+
+                optimizerG.step()
 
             # anneal tau for gumbel
             if opt.use_gumbel and opt.gumbel_anneal_interval > 0 and not opt.estimate_temp and i % opt.gumbel_anneal_interval == 0 and i > 0:
@@ -335,6 +442,10 @@ def trainModel(G, D, trainData, validData, dataset, optimizerG, optimizerD):
         #  (1) train for one epoch on the training set
         train_loss = trainEpoch(epoch)
         logger.info('Semi-supervision train loss: %g' % train_loss)
+
+        valid_loss = eval(G, ppl_eval_criterion, validData, dataset)
+        valid_ppl = math.exp(min(valid_loss, 100))
+        logger.info('Validation perplexity: %g' % valid_ppl)
 
 
 def main():
@@ -362,11 +473,11 @@ def main():
         decoder = onmt.Models.Decoder(opt, dicts['tgt'])
         generator = nn.Sequential(
             nn.Linear(opt.rnn_size, dicts['tgt'].size()))
+        temp_estimator = None
         if opt.estimate_temp:
             temp_estimator = onmt.Models.TempEstimator(opt)
-            G = onmt.Models.G(opt, encoder, decoder, generator, temp_estimator)
-        else:
-            G = onmt.Models.G(opt, encoder, decoder, generator)
+
+        G = onmt.Models.G(opt, encoder, decoder, generator, temp_estimator)
         D = onmt.Models.D(opt, dicts['tgt'])
         G.set_generate(True)
 
@@ -392,6 +503,7 @@ def main():
     nParams = sum([p.nelement() for p in D.parameters()])
     logger.info('* number of D parameters: %d' % nParams)
     trainModel(G, D, trainData, validData, dataset, optimizerG, optimizerD)
+
 
 
 if __name__ == "__main__":
