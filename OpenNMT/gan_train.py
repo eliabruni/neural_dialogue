@@ -29,6 +29,8 @@ parser.add_argument('-supervision', type=bool, default=False,
                     help='Whether to use supervision')
 parser.add_argument('-wasser', type=bool, default=False,
                     help='Use wasserstein optimization')
+parser.add_argument('-schedule_learn', type=bool, default=False,
+                    help='Experimental schedule learning for GAN ws')
 
 ## G options
 parser.add_argument('-layers', type=int, default=2,
@@ -372,7 +374,11 @@ def trainModel(G, D, trainData, validData, dataset, optimizerG, optimizerD):
                     errD = -(torch.mean(D_real) - torch.mean(D_fake))
                     errD.backward()
 
-                    optimizerD.step()
+                    if opt.schedule_learn:
+                        if D_G_z1 >0.15:
+                            optimizerD.step()
+                    else:
+                        optimizerD.step()
 
                     for p in D.parameters():
                         p.data.clamp_(-0.01, 0.01)
