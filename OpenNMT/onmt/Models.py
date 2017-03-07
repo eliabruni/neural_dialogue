@@ -149,7 +149,7 @@ class G(nn.Module):
         self.generator = generator
         self.temp_estimator = temp_estimator
         self.generate = False
-        self.tau0 = 1 # initial temperature
+        self.tau0 = 0.5 # initial temperature
         self.eps = 1e-20
         self.temperature = self.tau0
         self.ANNEAL_RATE = 0.00003
@@ -201,13 +201,11 @@ class G(nn.Module):
             x = x / temp_estim.repeat(x.size())
         else:
             x = x / self.temperature
-        # x = F.softmax(x)
         return x.view_as(input)
 
     def sampler(self, input):
         noise = self.get_noise(input)
         x = (input + noise) / self.temperature
-        # x = F.softmax(x)
         if self.opt.ST:
             # Use ST gumbel-softmax
             y_onehot = torch.FloatTensor(x.size())
@@ -248,7 +246,6 @@ class G(nn.Module):
             else:
                 out = self.generator(out)
                 return out.view(input.size(0), -1)
-                # out = F.softmax(out.view(input.size(0), -1))
 
         return out
 
