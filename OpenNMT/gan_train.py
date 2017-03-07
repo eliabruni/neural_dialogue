@@ -33,9 +33,9 @@ parser.add_argument('-wasser', type=bool, default=False,
 ## G options
 parser.add_argument('-layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
-parser.add_argument('-rnn_size', type=int, default=100,
+parser.add_argument('-rnn_size', type=int, default=10,
                     help='Size of LSTM hidden states')
-parser.add_argument('-word_vec_size', type=int, default=100,
+parser.add_argument('-word_vec_size', type=int, default=10,
                     help='Word embedding sizes')
 parser.add_argument('-input_feed', type=int, default=0,
                     help="""Feed the context vector at each time step as
@@ -150,6 +150,8 @@ def eval(G, criterion, data, dataset):
     total_words = 0
 
     G.eval()
+    if opt.use_gumbel:
+        G.set_gumbel(False)
     for i in range(len(data)):
         batch = data[i] # must be batch first for gather/scatter in DataParallel
         outputs = G(batch)
@@ -161,6 +163,8 @@ def eval(G, criterion, data, dataset):
         total_words += targets.data.ne(onmt.Constants.PAD).sum()
 
     G.train()
+    if opt.use_gumbel:
+        G.set_gumbel(True)
     return total_loss / total_words
 
 def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, log_pred=False, eval=False):
@@ -173,7 +177,7 @@ def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, log_pr
         pred_t = F.log_softmax(outputs)
 
         if log_pred:
-            log_predictions(pred_t, targets, G.log['distances'])
+            log_predictions(pred_t, targets, G.log['distances'], dataset['dicts']['tgt'])
         targ_t = targets.contiguous()
         loss_t = criterion(pred_t, targ_t.view(-1))
         loss += loss_t.data[0]
@@ -186,7 +190,7 @@ def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, log_pr
         pred_t = F.softmax(outputs)
 
         if log_pred:
-            log_predictions(pred_t, targets, G.log['distances'])
+            log_predictions(pred_t, targets, G.log['distances'], dataset['dicts']['tgt'])
 
         noise_sources = one_hot(G, sources.data,
                                      dataset['dicts']['src'].size())
@@ -226,7 +230,7 @@ def lev_dist(source, target):
     return 0 if np.array_equal(source, target) else jitted_lev_dist(source, target)
 
 
-def log_predictions(pred_t, targ_t, distances):
+def log_predictions(pred_t, targ_t, distances, tgt_dict):
     pred_t_data = pred_t.data.cpu().numpy()
     argmaxed_preds = np.argmax(pred_t_data, axis=1)
     argmax_preds_sorted = np.ones((opt.batch_size,argmaxed_preds.size/opt.batch_size ))
@@ -245,8 +249,8 @@ def log_predictions(pred_t, targ_t, distances):
     argmax_preds_sorted = argmax_preds_sorted.astype(int)
     rand_idx = np.random.randint(len(argmax_preds_sorted))
     logger.debug('SAMPLE:')
-    logger.debug('preds: ' + str(argmax_preds_sorted[rand_idx]))
-    logger.debug('trgts: ' + str(argmax_targets[rand_idx].astype(int)))
+    logger.debug('preds: ' + str(" ".join(tgt_dict.convertToLabels(argmax_preds_sorted[rand_idx], onmt.Constants.EOS))))
+    logger.debug('trgts: ' + str(" ".join(tgt_dict.convertToLabels(argmax_targets[rand_idx].astype(int), onmt.Constants.EOS))))
     distances.append(lev_dist(argmax_targets[rand_idx].astype(int), argmax_preds_sorted[rand_idx]))
     if len(distances) <= 10:
         avg_dist = np.mean(distances)
@@ -291,11 +295,12 @@ def clip_gradient(opt, model):
     totalnorm = math.sqrt(totalnorm)
     return min(1, opt.clip / (totalnorm + 1e-6))
 
-def trainModel(G, D, trainData, validData, dataset, optimizerG, optimizerD):
+def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=None):
     logger.info(G)
-    logger.info(D)
     G.train()
-    D.train()
+    if not opt.supervision:
+        logger.info(D)
+        D.train()
 
     # define criterion of each GPU
     criterion = nn.BCELoss()
@@ -353,7 +358,7 @@ def trainModel(G, D, trainData, validData, dataset, optimizerG, optimizerD):
                 fake = fake.contiguous().view(fake.size()[0]/opt.batch_size,opt.batch_size,fake.size()[1])
                 real = real.contiguous().view(real.size()[0]/opt.batch_size,opt.batch_size,real.size()[1])
 
-                G_train_interval = 1
+                G_train_interval = 10
                 if opt.wasser:
                     ############################
                     # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
@@ -501,15 +506,18 @@ def main():
             temp_estimator = onmt.Models.TempEstimator(opt)
 
         G = onmt.Models.G(opt, encoder, decoder, generator, temp_estimator)
-        D = onmt.Models.D(opt, dicts['tgt'])
         G.set_generate(True)
+        optimizerG = optim.Adam(G.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
 
-        if opt.wasser:
-            optimizerG = optim.RMSprop(G.parameters(), lr=5e-5)
-            optimizerD = optim.RMSprop(D.parameters(), lr=5e-5)
-        else:
-            optimizerG = optim.Adam(G.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
-            optimizerD = optim.Adam(D.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
+        D = None
+        optimizerD = None
+        if not opt.supervision:
+            D = onmt.Models.D(opt, dicts['tgt'])
+            if opt.wasser:
+                optimizerG = optim.RMSprop(G.parameters(), lr=5e-5)
+                optimizerD = optim.RMSprop(D.parameters(), lr=5e-5)
+            else:
+                optimizerD = optim.Adam(D.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
 
 
     else:
@@ -521,16 +529,19 @@ def main():
 
     if opt.cuda:
         G.cuda()
-        D.cuda()
+        if not opt.supervision:
+            D.cuda()
     else:
         G.cpu()
-        D.cpu()
+        if not opt.supervision:
+            D.cpu()
 
     nParams = sum([p.nelement() for p in G.parameters()])
     logger.info('* number of G parameters: %d' % nParams)
-    nParams = sum([p.nelement() for p in D.parameters()])
-    logger.info('* number of D parameters: %d' % nParams)
-    trainModel(G, D, trainData, validData, dataset, optimizerG, optimizerD)
+    if not opt.supervision:
+        nParams = sum([p.nelement() for p in D.parameters()])
+        logger.info('* number of D parameters: %d' % nParams)
+    trainModel(G, trainData, validData, dataset, optimizerG, D, optimizerD)
 
 
 
