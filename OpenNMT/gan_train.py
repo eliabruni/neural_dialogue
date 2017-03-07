@@ -245,10 +245,8 @@ def log_predictions(pred_t, targ_t, distances, tgt_dict):
     argmax_preds_sorted = argmax_preds_sorted.astype(int)
     rand_idx = np.random.randint(len(argmax_preds_sorted))
     logger.debug('SAMPLE:')
-    logger.debug('preds: ' + str(argmax_preds_sorted[rand_idx]))
-    logger.debug('trgts: ' + str(argmax_targets[rand_idx].astype(int)))
-    logger.debug('preds: ' + str(tgt_dict.convertToLabels(argmax_preds_sorted[rand_idx], onmt.Constants.EOS)))
-    logger.debug('trgts: ' + str(tgt_dict.convertToLabels(argmax_targets[rand_idx].astype(int), onmt.Constants.EOS)))
+    logger.debug('preds: ' + str(" ".join(tgt_dict.convertToLabels(argmax_preds_sorted[rand_idx], onmt.Constants.EOS))))
+    logger.debug('trgts: ' + str(" ".join(tgt_dict.convertToLabels(argmax_targets[rand_idx].astype(int), onmt.Constants.EOS))))
     distances.append(lev_dist(argmax_targets[rand_idx].astype(int), argmax_preds_sorted[rand_idx]))
     if len(distances) <= 10:
         avg_dist = np.mean(distances)
