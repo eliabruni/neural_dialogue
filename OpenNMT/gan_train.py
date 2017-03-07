@@ -375,7 +375,7 @@ def trainModel(G, D, trainData, validData, dataset, optimizerG, optimizerD):
                     errD.backward()
 
                     if opt.schedule_learn:
-                        if D_G_z1 >0.15:
+                        if D_G_z1 > 0.1:
                             optimizerD.step()
                     else:
                         optimizerD.step()
