@@ -173,7 +173,7 @@ def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, log_pr
         pred_t = F.log_softmax(outputs)
 
         if log_pred:
-            log_predictions(pred_t, targets, G.log['distances'])
+            log_predictions(pred_t, targets, G.log['distances'], dataset['dicts']['tgt'])
         targ_t = targets.contiguous()
         loss_t = criterion(pred_t, targ_t.view(-1))
         loss += loss_t.data[0]
@@ -186,7 +186,7 @@ def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, log_pr
         pred_t = F.softmax(outputs)
 
         if log_pred:
-            log_predictions(pred_t, targets, G.log['distances'])
+            log_predictions(pred_t, targets, G.log['distances'], dataset['dicts']['tgt'])
 
         noise_sources = one_hot(G, sources.data,
                                      dataset['dicts']['src'].size())
@@ -226,7 +226,7 @@ def lev_dist(source, target):
     return 0 if np.array_equal(source, target) else jitted_lev_dist(source, target)
 
 
-def log_predictions(pred_t, targ_t, distances):
+def log_predictions(pred_t, targ_t, distances, tgt_dict):
     pred_t_data = pred_t.data.cpu().numpy()
     argmaxed_preds = np.argmax(pred_t_data, axis=1)
     argmax_preds_sorted = np.ones((opt.batch_size,argmaxed_preds.size/opt.batch_size ))
@@ -247,6 +247,8 @@ def log_predictions(pred_t, targ_t, distances):
     logger.debug('SAMPLE:')
     logger.debug('preds: ' + str(argmax_preds_sorted[rand_idx]))
     logger.debug('trgts: ' + str(argmax_targets[rand_idx].astype(int)))
+    logger.debug('preds: ' + str(tgt_dict.convertToLabels(argmax_preds_sorted[rand_idx], onmt.Constants.EOS)))
+    logger.debug('trgts: ' + str(tgt_dict.convertToLabels(argmax_targets[rand_idx].astype(int), onmt.Constants.EOS)))
     distances.append(lev_dist(argmax_targets[rand_idx].astype(int), argmax_preds_sorted[rand_idx]))
     if len(distances) <= 10:
         avg_dist = np.mean(distances)
