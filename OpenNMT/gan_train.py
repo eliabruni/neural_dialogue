@@ -328,12 +328,6 @@ def trainModel(G, D, trainData, validData, dataset, optimizerG, optimizerD):
                 fake, real, loss, gradOutput = memoryEfficientLoss(
                     G, outputs, sources, targets, dataset, cxt_criterion, log_pred)
 
-                # outputs.backward(gradOutput)
-
-                # print('ITERATION: ')
-                # for p in G.parameters():
-                #     print('p.grad.data: ' + str(p.grad.data))
-
                 # update the parameters
                 grad_norm = optimizerG.step()
                 report_loss += loss
@@ -359,7 +353,7 @@ def trainModel(G, D, trainData, validData, dataset, optimizerG, optimizerD):
                 fake = fake.contiguous().view(fake.size()[0]/opt.batch_size,opt.batch_size,fake.size()[1])
                 real = real.contiguous().view(real.size()[0]/opt.batch_size,opt.batch_size,real.size()[1])
 
-                G_train_interval = 5
+                G_train_interval = 1
                 if opt.wasser:
                     ############################
                     # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
