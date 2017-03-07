@@ -243,9 +243,6 @@ class G(nn.Module):
                     out = self.estim_sampler(out, temp_estim)
                 else:
                     out = self.estim_sampler(out)
-            # else:
-            #     out = self.generator(out)
-            #     return out.view(input.size(0), -1)
 
         return out
 

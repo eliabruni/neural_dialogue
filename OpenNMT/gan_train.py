@@ -150,6 +150,8 @@ def eval(G, criterion, data, dataset):
     total_words = 0
 
     G.eval()
+    if opt.use_gumbel:
+        G.set_gumbel(False)
     for i in range(len(data)):
         batch = data[i] # must be batch first for gather/scatter in DataParallel
         outputs = G(batch)
@@ -161,6 +163,8 @@ def eval(G, criterion, data, dataset):
         total_words += targets.data.ne(onmt.Constants.PAD).sum()
 
     G.train()
+    if opt.use_gumbel:
+        G.set_gumbel(True)
     return total_loss / total_words
 
 def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, log_pred=False, eval=False):
@@ -291,11 +295,12 @@ def clip_gradient(opt, model):
     totalnorm = math.sqrt(totalnorm)
     return min(1, opt.clip / (totalnorm + 1e-6))
 
-def trainModel(G, D, trainData, validData, dataset, optimizerG, optimizerD):
+def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=None):
     logger.info(G)
-    logger.info(D)
     G.train()
-    D.train()
+    if not opt.supervision:
+        logger.info(D)
+        D.train()
 
     # define criterion of each GPU
     criterion = nn.BCELoss()
@@ -501,15 +506,18 @@ def main():
             temp_estimator = onmt.Models.TempEstimator(opt)
 
         G = onmt.Models.G(opt, encoder, decoder, generator, temp_estimator)
-        D = onmt.Models.D(opt, dicts['tgt'])
         G.set_generate(True)
+        optimizerG = optim.Adam(G.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
 
-        if opt.wasser:
-            optimizerG = optim.RMSprop(G.parameters(), lr=5e-5)
-            optimizerD = optim.RMSprop(D.parameters(), lr=5e-5)
-        else:
-            optimizerG = optim.Adam(G.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
-            optimizerD = optim.Adam(D.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
+        D = None
+        optimizerD = None
+        if not opt.supervision:
+            D = onmt.Models.D(opt, dicts['tgt'])
+            if opt.wasser:
+                optimizerG = optim.RMSprop(G.parameters(), lr=5e-5)
+                optimizerD = optim.RMSprop(D.parameters(), lr=5e-5)
+            else:
+                optimizerD = optim.Adam(D.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
 
 
     else:
@@ -521,16 +529,19 @@ def main():
 
     if opt.cuda:
         G.cuda()
-        D.cuda()
+        if not opt.supervision:
+            D.cuda()
     else:
         G.cpu()
-        D.cpu()
+        if not opt.supervision:
+            D.cpu()
 
     nParams = sum([p.nelement() for p in G.parameters()])
     logger.info('* number of G parameters: %d' % nParams)
-    nParams = sum([p.nelement() for p in D.parameters()])
-    logger.info('* number of D parameters: %d' % nParams)
-    trainModel(G, D, trainData, validData, dataset, optimizerG, optimizerD)
+    if not opt.supervision:
+        nParams = sum([p.nelement() for p in D.parameters()])
+        logger.info('* number of D parameters: %d' % nParams)
+    trainModel(G, trainData, validData, dataset, optimizerG, D, optimizerD)
 
 
 
