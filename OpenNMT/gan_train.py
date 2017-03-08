@@ -328,7 +328,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
             outputs = G(batch)
             sources = batch[0]
             targets = batch[1][1:]  # exclude <s> from targets
-            log_pred = i % (opt.log_interval*) == 0 and i > 0
+            log_pred = i % (opt.log_interval*5) == 0 and i > 0
 
             if opt.supervision:
                 fake, real, loss, gradOutput = memoryEfficientLoss(
