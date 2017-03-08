@@ -414,25 +414,25 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     D.zero_grad()
 
                     # train with real
-                    output = D(real)
+                    D_real = D(real)
                     label = torch.FloatTensor(opt.batch_size)
                     if opt.cuda:
                         label = label.cuda()
                     label = Variable(label)
-                    label.data.resize_(output.size()[0]).fill_(real_label)
+                    label.data.resize_(D_real.size()[0]).fill_(real_label)
                     label = label.unsqueeze(1)
 
-                    errD_real = criterion(output, label)
+                    errD_real = criterion(D_real, label)
                     errD_real.backward()
-                    D_x = output.data.mean()
+                    D_x = D_real.data.mean()
 
                     # train with fake
                     label.data.fill_(fake_label)
-                    output = D(fake.detach())
-                    errD_fake = criterion(output, label)
+                    D_fake = D(fake.detach())
+                    errD_fake = criterion(D_fake, label)
                     errD_fake.backward()
 
-                    D_G_z1 = output.data.mean()
+                    D_G_z1 = D_fake.data.mean()
                     errD = errD_real + errD_fake
 
                     optimizerD.step()
@@ -443,16 +443,16 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     G.zero_grad()
 
                     label.data.fill_(real_label)  # fake labels are real for generator cost
-                    output = D(fake)
+                    D_fake = D(fake)
 
                     if opt.bgan:
                         errG = 0.5 * torch.mean((torch.log(D_fake) - torch.log(1 - D_fake)) ** 2)
                     else:
-                        errG = criterion(output, label)
+                        errG = criterion(D_fake, label)
 
                     errG.backward()
 
-                    D_G_z2 = output.data.mean()
+                    D_G_z2 = D_fake.data.mean()
 
                     # print('ITERATION: ')
                     # for p in G.parameters():
