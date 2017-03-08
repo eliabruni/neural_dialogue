@@ -152,7 +152,7 @@ def eval(G, criterion, data, dataset):
     total_words = 0
 
     G.eval()
-    if opt.use_gumbel:
+    if not opt.supervision:
         G.set_gumbel(False)
     for i in range(len(data)):
         batch = data[i] # must be batch first for gather/scatter in DataParallel
@@ -166,7 +166,7 @@ def eval(G, criterion, data, dataset):
         total_words += targets.data.ne(onmt.Constants.PAD).sum()
 
     G.train()
-    if opt.use_gumbel:
+    if not opt.supervision:
         G.set_gumbel(True)
     return total_loss / total_words
 
