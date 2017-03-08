@@ -29,6 +29,8 @@ parser.add_argument('-supervision', type=bool, default=False,
                     help='Whether to use supervision')
 parser.add_argument('-wasser', type=bool, default=False,
                     help='Use wasserstein optimization')
+parser.add_argument('-bgan', type=bool, default=False,
+                    help='Use boundary seeking gan')
 
 ## G options
 parser.add_argument('-layers', type=int, default=2,
@@ -442,7 +444,11 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
                     label.data.fill_(real_label)  # fake labels are real for generator cost
                     output = D(fake)
-                    errG = criterion(output, label)
+
+                    if opt.bgan:
+                        errG = 0.5 * torch.mean((torch.log(D_fake) - torch.log(1 - D_fake)) ** 2)
+                    else:
+                        errG = criterion(output, label)
 
                     errG.backward()
 
