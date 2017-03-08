@@ -1,6 +1,7 @@
 import onmt
 import torch
 from torch.autograd import Variable
+import torch.nn.functional as F
 
 
 class Translator(object):
@@ -91,6 +92,7 @@ class Translator(object):
                     tgtBatch[:, :-1], decStates, context, initOutput)
             for dec_t, tgt_t in zip(decOut.transpose(0, 1), tgtBatch.transpose(0, 1)[1:].data):
                 gen_t = self.model.generator.forward(dec_t)
+                gen_t = F.log_softmax(gen_t)
                 tgt_t = tgt_t.unsqueeze(1)
                 scores = gen_t.data.gather(1, tgt_t)
                 scores.masked_fill_(tgt_t.eq(onmt.Constants.PAD), 0)
@@ -124,6 +126,7 @@ class Translator(object):
             # decOut: 1 x (beam*batch) x numWords
             decOut = decOut.transpose(0, 1).squeeze(0)
             out = self.model.generator.forward(decOut)
+            out = F.log_softmax(out)
 
             # batch x beam x numWords
             wordLk = out.view(beamSize, remainingSents, -1).transpose(0, 1).contiguous()

@@ -328,11 +328,10 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
             outputs = G(batch)
             sources = batch[0]
             targets = batch[1][1:]  # exclude <s> from targets
-            log_pred = i % (opt.log_interval*5) == 0 and i > 0
 
             if opt.supervision:
                 fake, real, loss, gradOutput = memoryEfficientLoss(
-                    G, outputs, sources, targets, dataset, cxt_criterion, log_pred)
+                    G, outputs, sources, targets, dataset, cxt_criterion)
 
                 # update the parameters
                 grad_norm = optimizerG.step()
@@ -481,6 +480,17 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
         valid_loss = eval(G, cxt_criterion, validData, dataset)
         valid_ppl = math.exp(min(valid_loss, 100))
         logger.info('Validation perplexity: %g' % valid_ppl)
+
+        #  (4) drop a checkpoint
+        checkpoint = {
+            'model': G,
+            'dicts': dataset['dicts'],
+            'opt': opt,
+            'epoch': epoch,
+            'optim': optim,
+        }
+        torch.save(checkpoint,
+                   '%s_e%d_%.2f.pt' % (opt.save_model, epoch, valid_ppl))
 
 
 def main():
