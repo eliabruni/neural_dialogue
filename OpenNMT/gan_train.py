@@ -330,10 +330,11 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
             targets = batch[1][1:]  # exclude <s> from targets
 
             if opt.supervision:
+                G.zero_grad()
                 fake, real, loss, gradOutput = memoryEfficientLoss(
                     G, outputs, sources, targets, dataset, cxt_criterion)
 
-                G.zero_grad()
+
                 # update the parameters
                 grad_norm = optimizerG.step()
                 report_loss += loss
