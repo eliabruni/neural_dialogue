@@ -61,7 +61,7 @@ parser.add_argument('-estimate_temp', type=bool, default=False,
                     help='Use automatic estimation of temperature annealing for gumbel')
 
 ## D options
-parser.add_argument('-D_rnn_size', type=int, default=100,
+parser.add_argument('-D_rnn_size', type=int, default=10,
                     help='D: Size fo LSTM hidden states')
 parser.add_argument('-D_dropout', type=float, default=0.3,
                     help='Dropout probability; applied between LSTM stacks.')
@@ -118,7 +118,7 @@ parser.add_argument('-pre_word_vecs_dec',
 parser.add_argument('-cuda', action='store_true',
                     help="Use CUDA")
 
-parser.add_argument('-log_interval', type=int, default=50,
+parser.add_argument('-log_interval', type=int, default=10,
                     help="Print stats at this interval.")
 parser.add_argument('-seed', type=int, default=1111,
                     help="Seed for random initialization")
@@ -468,6 +468,12 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
         return total_loss / i
 
     for epoch in range(opt.start_epoch, opt.epochs + 1):
+
+        if epoch == 1:
+            valid_loss = eval(G, cxt_criterion, validData, dataset)
+            valid_ppl = math.exp(min(valid_loss, 100))
+            logger.info('Initial validation perplexity: %g' % valid_ppl)
+
         #  (1) train for one epoch on the training set
         train_loss = trainEpoch(epoch)
         logger.info('Semi-supervision train loss: %g' % train_loss)
@@ -508,12 +514,17 @@ def main():
 
         G = onmt.Models.G(opt, encoder, decoder, generator, temp_estimator)
         G.set_generate(True)
+        for p in G.parameters():
+            p.data.uniform_(-opt.param_init, opt.param_init)
+
         optimizerG = optim.Adam(G.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
 
         D = None
         optimizerD = None
         if not opt.supervision:
             D = onmt.Models.D(opt, dicts['tgt'])
+            for p in D.parameters():
+                p.data.uniform_(-opt.param_init, opt.param_init)
             if opt.wasser:
                 optimizerG = optim.RMSprop(G.parameters(), lr=5e-5)
                 optimizerD = optim.RMSprop(D.parameters(), lr=5e-5)
