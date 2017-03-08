@@ -363,7 +363,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                 fake = fake.contiguous().view(fake.size()[0]/opt.batch_size,opt.batch_size,fake.size()[1])
                 real = real.contiguous().view(real.size()[0]/opt.batch_size,opt.batch_size,real.size()[1])
 
-                G_train_interval = 10
+                G_train_interval = 20
                 if opt.wasser:
                     ############################
                     # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
