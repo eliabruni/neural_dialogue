@@ -239,7 +239,6 @@ class G(nn.Module):
                         h = torch.cat([h, h1], 0)
                     temp_estim = self.temp_estimator(h.unsqueeze(0))
                     temp_estim = temp_estim + 0.5
-                    print('temp_estim: ' + str(temp_estim))
                     self.temperature = temp_estim.data[0][0]
                     out = self.estim_sampler(out, temp_estim)
                 else:
