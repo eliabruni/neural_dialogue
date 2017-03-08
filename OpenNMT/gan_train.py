@@ -353,7 +353,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
             else:
 
                 fake, real, _, _ = memoryEfficientLoss(
-                    G, outputs, sources, targets, dataset, None, log_pred)
+                    G, outputs, sources, targets, dataset, None)
 
                 fake = fake.contiguous().view(fake.size()[0]/opt.batch_size,opt.batch_size,fake.size()[1])
                 real = real.contiguous().view(real.size()[0]/opt.batch_size,opt.batch_size,real.size()[1])
