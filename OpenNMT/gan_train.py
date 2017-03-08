@@ -333,6 +333,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                 fake, real, loss, gradOutput = memoryEfficientLoss(
                     G, outputs, sources, targets, dataset, cxt_criterion)
 
+                G.zero_grad()
                 # update the parameters
                 grad_norm = optimizerG.step()
                 report_loss += loss
@@ -524,8 +525,8 @@ def main():
 
         G = onmt.Models.G(opt, encoder, decoder, generator, temp_estimator)
         G.set_generate(True)
-        # for p in G.parameters():
-        #     p.data.uniform_(-opt.param_init, opt.param_init)
+        for p in G.parameters():
+            p.data.uniform_(-opt.param_init, opt.param_init)
 
         optimizerG = optim.Adam(G.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
 
