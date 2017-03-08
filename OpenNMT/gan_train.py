@@ -118,7 +118,7 @@ parser.add_argument('-pre_word_vecs_dec',
 parser.add_argument('-cuda', action='store_true',
                     help="Use CUDA")
 
-parser.add_argument('-log_interval', type=int, default=10,
+parser.add_argument('-log_interval', type=int, default=50,
                     help="Print stats at this interval.")
 parser.add_argument('-seed', type=int, default=1111,
                     help="Seed for random initialization")
@@ -157,7 +157,7 @@ def eval(G, criterion, data, dataset):
         outputs = G(batch)
         sources = batch[0]
         targets = batch[1][1:]  # exclude <s> from targets
-        log_pred = i % (opt.log_interval) == 0 and i > 0
+        log_pred = i % (opt.log_interval/5) == 0 and i > 0
         _, _, loss, _,  = memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, log_pred, True)
 
         total_loss += loss
@@ -487,7 +487,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
             'dicts': dataset['dicts'],
             'opt': opt,
             'epoch': epoch,
-            'optim': optim,
+            'optim': optimizerG,
         }
         torch.save(checkpoint,
                    '%s_e%d_%.2f.pt' % (opt.save_model, epoch, valid_ppl))
