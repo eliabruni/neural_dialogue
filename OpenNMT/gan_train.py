@@ -157,7 +157,8 @@ def eval(G, criterion, data, dataset):
         outputs = G(batch)
         sources = batch[0]
         targets = batch[1][1:]  # exclude <s> from targets
-        _, _, loss, _,  = memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, False, True)
+        log_pred = i % (opt.log_interval) == 0 and i > 0
+        _, _, loss, _,  = memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, log_pred, True)
 
         total_loss += loss
         total_words += targets.data.ne(onmt.Constants.PAD).sum()
