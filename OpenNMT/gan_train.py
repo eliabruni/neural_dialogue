@@ -152,8 +152,8 @@ def eval(G, criterion, data, dataset):
     total_words = 0
 
     G.eval()
-    if not opt.supervision:
-        G.set_gumbel(False)
+    # if not opt.supervision:
+    #     G.set_gumbel(False)
     for i in range(len(data)):
         batch = data[i] # must be batch first for gather/scatter in DataParallel
         outputs = G(batch)
@@ -166,8 +166,8 @@ def eval(G, criterion, data, dataset):
         total_words += targets.data.ne(onmt.Constants.PAD).sum()
 
     G.train()
-    if not opt.supervision:
-        G.set_gumbel(True)
+    # if not opt.supervision:
+    #     G.set_gumbel(True)
     return total_loss / total_words
 
 def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, log_pred=False, eval=False):
