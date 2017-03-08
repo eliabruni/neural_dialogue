@@ -333,8 +333,9 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
             if opt.supervision:
                 G.zero_grad()
+                log_pred = i % (opt.log_interval) == 0 and i > 0
                 fake, real, loss, gradOutput = memoryEfficientLoss(
-                    G, outputs, sources, targets, dataset, cxt_criterion)
+                    G, outputs, sources, targets, dataset, cxt_criterion, log_pred)
 
 
                 # update the parameters
@@ -355,9 +356,9 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         print("Generated temp: %.4f " % (learned_temp))
                         # print("Real temp: %.4f, Generated temp: %.4f " % (G.generator.real_temp, learned_temp))
             else:
-
+                log_pred = i % (opt.log_interval) == 0 and i > 0
                 fake, real, _, _ = memoryEfficientLoss(
-                    G, outputs, sources, targets, dataset, None)
+                    G, outputs, sources, targets, dataset, None, log_pred)
 
                 fake = fake.contiguous().view(fake.size()[0]/opt.batch_size,opt.batch_size,fake.size()[1])
                 real = real.contiguous().view(real.size()[0]/opt.batch_size,opt.batch_size,real.size()[1])
@@ -532,8 +533,8 @@ def main():
 
         G = onmt.Models.G(opt, encoder, decoder, generator, temp_estimator)
         G.set_generate(True)
-        for p in G.parameters():
-            p.data.uniform_(-opt.param_init, opt.param_init)
+        # for p in G.parameters():
+        #     p.data.uniform_(-opt.param_init, opt.param_init)
 
         optimizerG = optim.Adam(G.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
 
