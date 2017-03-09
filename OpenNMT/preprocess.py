@@ -96,6 +96,25 @@ def saveVocabulary(name, vocab, file):
     vocab.writeFile(file)
 
 
+# def initOSvocabulary:
+#     vocab = None
+#     if vocabFile is not None:
+#         # If given, load existing word dictionary.
+#         print('Reading ' + name + ' vocabulary from \'' + vocabFile + '\'...')
+#         vocab = onmt.Dict()
+#         vocab.loadFile(vocabFile)
+#         print('Loaded ' + vocab.size() + ' ' + name + ' words')
+#
+#     if vocab is None:
+#         # If a dictionary is still missing, generate it.
+#         print('Building ' + name + ' vocabulary...')
+#         genWordVocab = makeVocabulary(dataFile, vocabSize)
+#
+#         vocab = genWordVocab
+#
+#     print()
+#     return vocab
+
 def makeOSdata(srcFile):
     src, tgt = [], []
     sizes = []
@@ -129,7 +148,6 @@ def makeOSdata(srcFile):
             print('... %d sentences prepared' % count)
 
     srcF.close()
-
 
     if opt.shuffle == 1:
         print('... shuffling sentences')
