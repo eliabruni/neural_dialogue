@@ -153,7 +153,7 @@ class G(nn.Module):
         self.eps = 1e-20
         self.temperature = self.tau0
         self.ANNEAL_RATE = 0.00003
-        self.MIN_TEMP = 0.1
+        self.MIN_TEMP = 0.01
         self.iter_cnt = 0
 
     def set_generate(self, enabled):
