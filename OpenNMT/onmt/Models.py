@@ -153,7 +153,7 @@ class G(nn.Module):
         self.eps = 1e-20
         self.temperature = self.tau0
         self.ANNEAL_RATE = 0.00003
-        self.MIN_TEMP = 0.5
+        self.MIN_TEMP = 1
         self.iter_cnt = 0
 
     def set_generate(self, enabled):
@@ -238,7 +238,7 @@ class G(nn.Module):
                         h1 = dec_hidden[1].view(self.opt.layers * self.opt.batch_size * self.opt.rnn_size)
                         h = torch.cat([h, h1], 0)
                     temp_estim = self.temp_estimator(h.unsqueeze(0))
-                    temp_estim = temp_estim + 0.5
+                    temp_estim = temp_estim + 1
                     self.temperature = temp_estim.data[0][0]
                     out = self.estim_sampler(out, temp_estim)
                 else:

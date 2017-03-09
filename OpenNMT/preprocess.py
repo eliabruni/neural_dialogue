@@ -96,6 +96,22 @@ def saveVocabulary(name, vocab, file):
     vocab.writeFile(file)
 
 
+# def makeOSdata(srcFile):
+#     src, tgt = [], []
+#     sizes = []
+#     count, ignored = 0, 0
+#
+#     print('Processing %s ...' % (srcFile))
+#     srcF = open(srcFile)
+#
+#     while True:
+#         lines = srcF.readline().split('|')
+#         src += lines[0] + ' '  + onmt.Constants.IEOS + ' ' +  lines[1]
+#
+#         if len(srcWords) <= opt.seq_length:
+
+
+
 def makeData(srcFile, tgtFile, srcDicts, tgtDicts):
     src, tgt = [], []
     sizes = []
