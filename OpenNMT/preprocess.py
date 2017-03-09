@@ -96,20 +96,57 @@ def saveVocabulary(name, vocab, file):
     vocab.writeFile(file)
 
 
-# def makeOSdata(srcFile):
-#     src, tgt = [], []
-#     sizes = []
-#     count, ignored = 0, 0
-#
-#     print('Processing %s ...' % (srcFile))
-#     srcF = open(srcFile)
-#
-#     while True:
-#         lines = srcF.readline().split('|')
-#         src += lines[0] + ' '  + onmt.Constants.IEOS + ' ' +  lines[1]
-#
-#         if len(srcWords) <= opt.seq_length:
+def makeOSdata(srcFile):
+    src, tgt = [], []
+    sizes = []
+    count, ignored = 0, 0
 
+    print('Processing %s ...' % (srcFile))
+    srcF = open(srcFile)
+
+    while True:
+        lines = srcF.readline().split('|')
+
+        src_t = lines[0] + ' '  + onmt.Constants.IEOS + ' ' +  lines[1]
+        src_t = map(int, src_t.split(' '))
+        src_t = torch.LongTensor(src_t)
+
+        tgt_t = lines[2]
+        tgt_t = map(int, tgt_t.split(' '))
+        tgt_t = torch.LongTensor(tgt_t)
+
+        if len(src_t) <= opt.seq_length and len(tgt_t) <= opt.seq_length:
+            src += src_t
+            tgt += tgt_t
+
+            sizes += [len(src_t)]
+        else:
+            ignored += 1
+
+        count += 1
+
+        if count % opt.report_every == 0:
+            print('... %d sentences prepared' % count)
+
+    srcF.close()
+
+
+    if opt.shuffle == 1:
+        print('... shuffling sentences')
+        perm = torch.randperm(len(src))
+        src = [src[idx] for idx in perm]
+        tgt = [tgt[idx] for idx in perm]
+        sizes = [sizes[idx] for idx in perm]
+
+    print('... sorting sentences by size')
+    _, perm = torch.sort(torch.Tensor(sizes))
+    src = [src[idx] for idx in perm]
+    tgt = [tgt[idx] for idx in perm]
+
+    print('Prepared %d sentences (%d ignored due to length == 0 or > %d)' %
+          (len(src), ignored, opt.seq_length))
+
+    return src, tgt
 
 
 def makeData(srcFile, tgtFile, srcDicts, tgtDicts):
