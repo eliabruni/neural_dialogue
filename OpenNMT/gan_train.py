@@ -23,6 +23,8 @@ parser.add_argument('-save_model', default='model',
 parser.add_argument('-train_from',
                     help="""If training from a checkpoint then this is the
                     path to the pretrained model.""")
+parser.add_argument('-max_sent_length', default=20,
+                    help='Maximum sentence length.')
 
 # GAN options
 parser.add_argument('-supervision', type=bool, default=False,
@@ -35,9 +37,9 @@ parser.add_argument('-bgan', type=bool, default=False,
 ## G options
 parser.add_argument('-layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
-parser.add_argument('-rnn_size', type=int, default=10,
+parser.add_argument('-rnn_size', type=int, default=50,
                     help='Size of LSTM hidden states')
-parser.add_argument('-word_vec_size', type=int, default=10,
+parser.add_argument('-word_vec_size', type=int, default=50,
                     help='Word embedding sizes')
 parser.add_argument('-input_feed', type=int, default=0,
                     help="""Feed the context vector at each time step as
@@ -154,13 +156,14 @@ def eval(G, criterion, data, dataset):
     G.eval()
     if not opt.supervision:
         G.set_gumbel(False)
+    previous_out = None
     for i in range(len(data)):
         batch = data[i] # must be batch first for gather/scatter in DataParallel
-        outputs = G(batch)
         sources = batch[0]
         targets = batch[1][1:]  # exclude <s> from targets
+        outputs = G(previous_out, batch, eval=True)
         log_pred = i % (opt.log_interval/5) == 0 and i > 0
-        _, _, loss, _,  = memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, False, True)
+        _, _, loss  = memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, False, True)
 
         total_loss += loss
         total_words += targets.data.ne(onmt.Constants.PAD).sum()
@@ -172,7 +175,6 @@ def eval(G, criterion, data, dataset):
 
 def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, log_pred=False, eval=False):
 
-    grad_output = None
     loss = 0
     fake, real = None, None
 
@@ -186,8 +188,6 @@ def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, log_pr
         loss += loss_t.data[0]
         if not eval:
             loss_t.div(opt.batch_size).backward()
-
-        grad_output = None if outputs.grad is None else outputs.grad.data
 
     else:
         pred_t = F.softmax(outputs)
@@ -207,7 +207,7 @@ def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, log_pr
         fake = torch.cat([noise_sources, pred_t], 0)
         real = torch.cat([noise_sources,noise_targets],0)
 
-    return fake, real, loss, grad_output
+    return fake, real, loss
 
 
 def lev_dist(source, target):
@@ -314,6 +314,9 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
     real_label = 1
     fake_label = 0
     start_time = time.time()
+
+    previous_out = None
+
     def trainEpoch(epoch):
 
         # shuffle mini batch order
@@ -322,19 +325,22 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
         total_loss, report_loss = 0, 0
         total_words, report_words = 0, 0
         start = time.time()
+        previous_out = None
         for i in range(len(trainData)):
 
             batchIdx = batchOrder[i] if epoch >= opt.curriculum else i
             batch = trainData[batchIdx]
+            outputs = G(previous_out, batch, eval=False)
+            # previous_out = outputs.view(outputs.size(0) / opt.batch_size, opt.batch_size, outputs.size(1)).detach()
+            previous_out = outputs.detach()
 
-            outputs = G(batch)
             sources = batch[0]
             targets = batch[1][1:]  # exclude <s> from targets
 
             if opt.supervision:
                 G.zero_grad()
                 log_pred = i % (opt.log_interval) == 0 and i > 0
-                fake, real, loss, gradOutput = memoryEfficientLoss(
+                _, _, loss = memoryEfficientLoss(
                     G, outputs, sources, targets, dataset, cxt_criterion, log_pred)
 
 
@@ -357,7 +363,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         # print("Real temp: %.4f, Generated temp: %.4f " % (G.generator.real_temp, learned_temp))
             else:
                 log_pred = i % (opt.log_interval) == 0 and i > 0
-                fake, real, _, _ = memoryEfficientLoss(
+                fake, real, _= memoryEfficientLoss(
                     G, outputs, sources, targets, dataset, None, log_pred)
 
                 fake = fake.contiguous().view(fake.size()[0]/opt.batch_size,opt.batch_size,fake.size()[1])

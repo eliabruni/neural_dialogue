@@ -73,6 +73,7 @@ class StackedLSTM(nn.Module):
 class Decoder(nn.Module):
 
     def __init__(self, opt, dicts):
+        self.opt = opt
         self.layers = opt.layers
         self.input_feed = opt.input_feed
         input_size = opt.word_vec_size
@@ -83,6 +84,9 @@ class Decoder(nn.Module):
         self.word_lut = nn.Embedding(dicts.size(),
                                   opt.word_vec_size,
                                   padding_idx=onmt.Constants.PAD)
+
+        self.word_lut_unsup = nn.Linear(dicts.size(), opt.word_vec_size)
+
         self.rnn = StackedLSTM(opt.layers, input_size, opt.rnn_size, opt.dropout)
         self.attn = onmt.modules.GlobalAttention(opt.rnn_size)
         self.dropout = nn.Dropout(opt.dropout)
@@ -94,24 +98,43 @@ class Decoder(nn.Module):
             self.word_lut.weight.copy_(pretrained)
 
 
-    def forward(self, input, hidden, context, init_output):
-        emb = self.word_lut(input)
+    def forward(self, previous_out, input, hidden, context, init_output, eval=False):
 
-        batch_size = input.size(1)
+        if eval or self.opt.supervision:
+            emb = self.word_lut(input)
 
-        h_size = (batch_size, self.hidden_size)
-        output = Variable(emb.data.new(*h_size).zero_(), requires_grad=False)
+            batch_size = input.size(1)
 
-        # n.b. you can increase performance if you compute W_ih * x for all
-        # iterations in parallel, but that's only possible if
-        # self.input_feed=False
-        outputs = []
-        output = init_output
+            h_size = (batch_size, self.hidden_size)
+            output = Variable(emb.data.new(*h_size).zero_(), requires_grad=False)
+
+            # n.b. you can increase performance if you compute W_ih * x for all
+            # iterations in parallel, but that's only possible if
+            # self.input_feed=False
+            outputs = []
+            output = init_output
+        else:
+
+            if previous_out:
+                emb = self.word_lut_unsup(previous_out)
+                emb = emb.view(emb.size(0) / self.opt.batch_size, self.opt.batch_size, emb.size(1))
+            else:
+                emb = init_output
+
+            batch_size = emb.size(1)
+            h_size = (batch_size, self.hidden_size)
+            output = Variable(emb.data.new(*h_size).zero_(), requires_grad=False)
+
+            # n.b. you can increase performance if you compute W_ih * x for all
+            # iterations in parallel, but that's only possible if
+            # self.input_feed=False
+            outputs = []
+            output = init_output
+
         for emb_t in emb.chunk(emb.size(0)):
             emb_t = emb_t.squeeze(0)
             if self.input_feed:
                 emb_t = torch.cat([emb_t, output], 1)
-
             output, hidden = self.rnn(emb_t, hidden)
             output, attn = self.attn(output, context.t())
             output = self.dropout(output)
@@ -167,7 +190,7 @@ class G(nn.Module):
 
     def make_init_decoder_output(self, context):
         batch_size = context.size(1)
-        h_size = (batch_size, self.decoder.hidden_size)
+        h_size = (self.opt.max_sent_length, batch_size, self.decoder.hidden_size)
         return Variable(context.data.new(*h_size).zero_(), requires_grad=False)
 
     def _fix_enc_hidden(self, h):
@@ -218,7 +241,7 @@ class G(nn.Module):
         else:
             return x.view_as(input)
 
-    def forward(self, input):
+    def forward(self, previous_out, input, eval=False):
         src = input[0]
         tgt = input[1][:-1]  # exclude last target from inputs
         enc_hidden, context = self.encoder(src)
@@ -227,7 +250,7 @@ class G(nn.Module):
         enc_hidden = (self._fix_enc_hidden(enc_hidden[0]),
                       self._fix_enc_hidden(enc_hidden[1]))
 
-        out, dec_hidden, _attn = self.decoder(tgt, enc_hidden, context, init_output)
+        out, dec_hidden, _attn = self.decoder(previous_out, tgt, enc_hidden, context, init_output, eval)
         if self.generate:
             out = out.view(-1, out.size(2))
             out = self.generator(out)
