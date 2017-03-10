@@ -153,8 +153,6 @@ class Decoder(nn.Module):
 
                 output, attn = self.attn(output, context.t())
 
-
-
                 output = self.dropout(output)
                 # todo: put the generation
                 out_t = self.generator(output, hidden)
