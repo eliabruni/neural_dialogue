@@ -5,6 +5,7 @@ import onmt.modules
 import torch.nn.functional as F
 import numpy as np
 
+_INF = float('inf')
 class Encoder(nn.Module):
 
     def __init__(self, opt, dicts):
@@ -95,6 +96,11 @@ class Decoder(nn.Module):
 
         self.hidden_size = opt.rnn_size
 
+        self.mask = None
+
+        def applyMask(self, mask):
+            self.mask = mask
+
         if opt.pre_word_vecs_enc is not None:
             pretrained = torch.load(opt.pre_word_vecs_dec)
             self.word_lut.weight.copy_(pretrained)
@@ -127,6 +133,7 @@ class Decoder(nn.Module):
                 outputs += [output]
             outputs = torch.stack(outputs)
         else:
+
             emb_t = Variable(torch.LongTensor(1, self.opt.batch_size).zero_().fill_(onmt.Constants.BOS))
             batch_size = emb_t.size(1)
             h_size = (batch_size, self.hidden_size)
@@ -141,7 +148,13 @@ class Decoder(nn.Module):
                 emb_t = emb_t.squeeze(0)
                 if self.input_feed:
                     emb_t = torch.cat([emb_t, output], 1)
+
+                #  This mask is applied to the attention model inside the decoder
+                #  so that the attention ignores source padding
+                padMask = emb_t.data.eq(onmt.Constants.PAD)
+                emb_t.data.masked_fill_(padMask, -_INF)
                 output, hidden = self.rnn(emb_t, hidden)
+
                 output, attn = self.attn(output, context.t())
                 output = self.dropout(output)
                 # todo: put the generation
