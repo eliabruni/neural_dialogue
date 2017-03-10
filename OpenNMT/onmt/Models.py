@@ -144,24 +144,20 @@ class Decoder(nn.Module):
                 output, hidden = self.rnn(emb_t, hidden)
                 output, attn = self.attn(output, context.t())
                 output = self.dropout(output)
-                # print('output: ' + str(output))
                 # todo: put the generation
                 out_t = self.generator(output, hidden)
-                # print('output: ' + str(output))
+                out_t_sofmtmaxed = F.softmax(out_t)
                 if self.opt.st_conditioning:
-                    # print('out_t: ' + str(out_t))
-                    pred_t_data = out_t.data.cpu().numpy()
+                    pred_t_data = out_t_sofmtmaxed.data.cpu().numpy()
                     argmaxed_preds = np.argmax(pred_t_data, axis=1)
 
                     argmaxed_preds = torch.from_numpy(argmaxed_preds)
                     argmaxed_preds = Variable(argmaxed_preds)
                     if self.opt.cuda:
                         argmaxed_preds = argmaxed_preds.cuda()
-                    # print('argmaxed_preds: ' + str(argmaxed_preds))
                     emb_t = self.word_lut(argmaxed_preds)
                 else:
-                    emb_t = self.word_lut_unsup(out_t)
-                    # print('emb_t: ' + str(emb_t))
+                    emb_t = self.word_lut_unsup(out_t_sofmtmaxed)
 
                 outputs += [out_t]
 
