@@ -180,24 +180,6 @@ class Decoder(nn.Module):
             outputs = outputs.view(outputs.size(0)*outputs.size(1), outputs.size(2))
         return outputs, hidden, attn
 
-class TempEstimator(nn.Module):
-    def __init__(self, opt):
-        super(TempEstimator, self).__init__()
-        if opt.brnn:
-            self.linear1 = nn.Linear(opt.rnn_size*opt.layers*opt.batch_size*2, 1)
-        else:
-            self.linear1 = nn.Linear(opt.rnn_size * opt.layers * opt.batch_size, 1)
-        # self.relu = nn.ReLU()
-        self.softplus = nn.Softplus()
-
-    def forward(self, input):
-        out = self.linear1(input)
-        # temp = self.relu(out)
-        temp = self.softplus(out)
-
-        return temp
-
-
 class Generator(nn.Module):
     def __init__(self, opt, dicts, temp_estimator=None):
         super(Generator, self).__init__()
@@ -274,6 +256,23 @@ class Generator(nn.Module):
 
         return out
 
+class TempEstimator(nn.Module):
+    def __init__(self, opt):
+        super(TempEstimator, self).__init__()
+        if opt.brnn:
+            self.linear1 = nn.Linear(opt.rnn_size*opt.layers*opt.batch_size*2, 1)
+        else:
+            self.linear1 = nn.Linear(opt.rnn_size * opt.layers * opt.batch_size, 1)
+        # self.relu = nn.ReLU()
+        self.softplus = nn.Softplus()
+
+    def forward(self, input):
+        out = self.linear1(input)
+        # temp = self.relu(out)
+        temp = self.softplus(out)
+
+        return temp
+
 class G(nn.Module):
 
     def __init__(self, opt, encoder, decoder, generator=None, temp_estimator=None):
@@ -292,6 +291,12 @@ class G(nn.Module):
         self.ANNEAL_RATE = 0.00003
         self.MIN_TEMP = 0.5
         self.iter_cnt = 0
+
+        # Optionally tie weights as in:
+        # "Tying Word Vectors and Word Classifiers: A Loss Framework for Language Modeling" (Inan et al. 2016)
+        # https://arxiv.org/abs/1611.01462
+        if self.opt.tied:
+            self.generator.weight = self.encoder.word_lut.weight
 
     def set_generate(self, enabled):
         self.generate = enabled

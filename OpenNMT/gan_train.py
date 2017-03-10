@@ -49,6 +49,8 @@ parser.add_argument('-input_feed', type=int, default=0,
                     help="""Feed the context vector at each time step as
                     additional input (via concatenation with the word
                     embeddings) to the decoder.""")
+parser.add_argument('-tied', action='store_true',
+                    help='tie the word embedding and softmax weights')
 # parser.add_argument('-residual',   action="store_true",
 #                     help="Add residual connections between RNN layers.")
 parser.add_argument('-brnn', type=bool, default=False,
@@ -575,6 +577,7 @@ def main():
         G.set_generate(True)
         # for p in G.parameters():
         #     p.data.uniform_(-opt.param_init, opt.param_init)
+
 
         optimizerG = optim.Adam(G.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
 
