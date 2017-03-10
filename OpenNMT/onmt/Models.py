@@ -149,13 +149,15 @@ class Decoder(nn.Module):
                 if self.input_feed:
                     emb_t = torch.cat([emb_t, output], 1)
 
-                #  This mask is applied to the attention model inside the decoder
-                #  so that the attention ignores source padding
-                padMask = emb_t.data.eq(onmt.Constants.PAD)
-                emb_t.data.masked_fill_(padMask, -_INF)
                 output, hidden = self.rnn(emb_t, hidden)
 
                 output, attn = self.attn(output, context.t())
+
+                #  This mask is applied to the attention model inside the decoder
+                #  so that the attention ignores source padding
+                padMask = output.data.eq(onmt.Constants.PAD)
+                output.data.masked_fill_(padMask, -_INF)
+
                 output = self.dropout(output)
                 # todo: put the generation
                 out_t = self.generator(output, hidden)
