@@ -493,7 +493,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                 if i % opt.log_interval == 0 and i > 0:
                     logger.info('[%d/%d][%d/%d] Temp: %.4f Loss_D: %.4f Loss_G: %.4f D(x): %.4f D(G(z)): %.4f / %.4f'
                           % (epoch, opt.epochs, i, len(trainData),
-                             G.temperature, errD.data[0], errG.data[0], D_x, D_G_z1, D_G_z2))
+                             G.generator.temperature, errD.data[0], errG.data[0], D_x, D_G_z1, D_G_z2))
 
                 report_loss = report_words = 0
                 start = time.time()
