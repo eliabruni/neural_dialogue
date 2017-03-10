@@ -435,9 +435,9 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
                         D_G_z2 = D_fake.data.mean()
 
-                        # print('ITERATION: ')
-                        # for p in G.parameters():
-                            # print('p.grad.data: ' + str(p.grad.data))
+                        print('ITERATION: ')
+                        for p in G.parameters():
+                            print('p.grad.data: ' + str(p.grad.data))
 
                         optimizerG.step()
 
