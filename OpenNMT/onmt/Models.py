@@ -151,6 +151,8 @@ class Decoder(nn.Module):
 
                     argmaxed_preds = torch.from_numpy(argmaxed_preds)
                     argmaxed_preds = Variable(argmaxed_preds)
+                    if self.opt.cuda:
+                        argmaxed_preds = argmaxed_preds.cuda()
                     # print('argmaxed_preds: ' + str(argmaxed_preds))
                     emb_t = self.word_lut(argmaxed_preds)
                 else:
