@@ -127,7 +127,6 @@ class Decoder(nn.Module):
                 outputs += [output]
             outputs = torch.stack(outputs)
         else:
-
             emb_t = Variable(torch.LongTensor(1, self.opt.batch_size).zero_().fill_(onmt.Constants.BOS))
             batch_size = emb_t.size(1)
             h_size = (batch_size, self.hidden_size)
