@@ -127,9 +127,14 @@ class Decoder(nn.Module):
                 outputs += [output]
             outputs = torch.stack(outputs)
         else:
+
+            emb_t = Variable(torch.LongTensor(1, self.opt.batch_size).zero_().fill_(onmt.Constants.BOS))
+            batch_size = emb_t.size(1)
+            h_size = (batch_size, self.hidden_size)
+            output = Variable(emb_t.data.new(*h_size).zero_(), requires_grad=False)
             outputs = []
             output = init_output
-            emb_t = Variable(torch.LongTensor(1, self.opt.batch_size).zero_().fill_(onmt.Constants.BOS))
+
             if self.opt.cuda:
                 emb_t = emb_t.cuda()
             emb_t=self.word_lut(emb_t)
