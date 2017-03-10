@@ -129,7 +129,10 @@ class Decoder(nn.Module):
         else:
             outputs = []
             output = init_output
-            emb_t=self.word_lut(Variable(torch.LongTensor(1, self.opt.batch_size).zero_().fill_(onmt.Constants.BOS)))
+            emb_t = Variable(torch.LongTensor(1, self.opt.batch_size).zero_().fill_(onmt.Constants.BOS))
+            if self.opt.cuda:
+                emb_t = emb_t.cuda()
+            emb_t=self.word_lut(emb_t)
             for i in range(self.opt.max_sent_length):
                 emb_t = emb_t.squeeze(0)
                 if self.input_feed:
