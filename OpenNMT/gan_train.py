@@ -144,8 +144,8 @@ if torch.cuda.is_available():
     else:
         torch.cuda.manual_seed(opt.seed)
 
-def GANCriterion(vocabSize):
-    weight = torch.ones(vocabSize)
+def GANCriterion():
+    weight = torch.ones(1)
     weight[onmt.Constants.PAD] = 0
     crit = nn.BCELoss(weight, size_average=False)
     if opt.cuda:
@@ -336,7 +336,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
     # define criterion of each GPU
     # criterion = nn.BCELoss()
-    criterion = GANCriterion(dataset['dicts']['tgt'].size())
+    criterion = GANCriterion()
 
     cxt_criterion = NMTCriterion(dataset['dicts']['tgt'].size())
 
