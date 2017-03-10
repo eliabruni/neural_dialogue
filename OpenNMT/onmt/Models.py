@@ -159,9 +159,6 @@ class Decoder(nn.Module):
                 # todo: put the generation
                 out_t = self.generator(output, hidden)
 
-                #  This mask is applied to..
-                out_t[:,onmt.Constants.PAD] = 0
-
                 out_t_sofmtmaxed = F.softmax(out_t)
                 if self.opt.st_conditioning:
                     pred_t_data = out_t_sofmtmaxed.data.cpu().numpy()
