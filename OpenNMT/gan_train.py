@@ -7,7 +7,7 @@ import math
 import time
 import numpy as np
 import torch.nn.functional as F
-import numba
+# import numba
 import logging
 from torch import optim
 
@@ -239,7 +239,7 @@ def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, log_pr
 
 def lev_dist(source, target):
 
-    @numba.jit("f4(i8[:], i8[:])", nopython=True, cache=True, target="cpu")
+    # @numba.jit("f4(i8[:], i8[:])", nopython=True, cache=True, target="cpu")
     def jitted_lev_dist(vec1, vec2):
         # Prepare a matrix
         dist = np.zeros((vec1.size + 1, vec2.size + 1))
