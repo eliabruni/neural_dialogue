@@ -150,12 +150,13 @@ class Decoder(nn.Module):
                 if self.opt.st_conditioning:
                     pred_t_data = out_t_sofmtmaxed.data.cpu().numpy()
                     argmaxed_preds = np.argmax(pred_t_data, axis=1)
-
                     argmaxed_preds = torch.from_numpy(argmaxed_preds)
                     argmaxed_preds = Variable(argmaxed_preds)
                     if self.opt.cuda:
                         argmaxed_preds = argmaxed_preds.cuda()
                     emb_t = self.word_lut(argmaxed_preds)
+                    if self.opt.batch_size == 1:
+                        emb_t = emb_t.unsqueeze(0)
                 else:
                     emb_t = self.word_lut_unsup(out_t_sofmtmaxed)
 
