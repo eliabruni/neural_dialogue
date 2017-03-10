@@ -72,15 +72,17 @@ class StackedLSTM(nn.Module):
 
 class Decoder(nn.Module):
 
-    def __init__(self, opt, dicts):
+    def __init__(self, opt, dicts, generator=None):
         self.opt = opt
         self.layers = opt.layers
         self.input_feed = opt.input_feed
+
         input_size = opt.word_vec_size
         if self.input_feed:
             input_size += opt.rnn_size
 
         super(Decoder, self).__init__()
+        self.generator = generator
         self.word_lut = nn.Embedding(dicts.size(),
                                   opt.word_vec_size,
                                   padding_idx=onmt.Constants.PAD)
@@ -98,10 +100,11 @@ class Decoder(nn.Module):
             self.word_lut.weight.copy_(pretrained)
 
 
-    def forward(self, previous_out, input, hidden, context, init_output, eval=False):
+    def forward(self, input, hidden, context, init_output, eval=False):
 
         if eval or self.opt.supervision:
             emb = self.word_lut(input)
+
 
             batch_size = input.size(1)
 
@@ -113,34 +116,48 @@ class Decoder(nn.Module):
             # self.input_feed=False
             outputs = []
             output = init_output
+
+            for emb_t in emb.chunk(emb.size(0)):
+                emb_t = emb_t.squeeze(0)
+                if self.input_feed:
+                    emb_t = torch.cat([emb_t, output], 1)
+                output, hidden = self.rnn(emb_t, hidden)
+                output, attn = self.attn(output, context.t())
+                output = self.dropout(output)
+                outputs += [output]
+            outputs = torch.stack(outputs)
         else:
-
-            if previous_out:
-                emb = self.word_lut_unsup(previous_out)
-                emb = emb.view(emb.size(0) / self.opt.batch_size, self.opt.batch_size, emb.size(1))
-            else:
-                emb = init_output
-
-            batch_size = emb.size(1)
-            h_size = (batch_size, self.hidden_size)
-            output = Variable(emb.data.new(*h_size).zero_(), requires_grad=False)
-
-            # n.b. you can increase performance if you compute W_ih * x for all
-            # iterations in parallel, but that's only possible if
-            # self.input_feed=False
             outputs = []
             output = init_output
+            emb_t=self.word_lut(Variable(torch.LongTensor(1, self.opt.batch_size).zero_().fill_(onmt.Constants.BOS)))
+            for i in range(self.opt.max_sent_length):
+                emb_t = emb_t.squeeze(0)
+                if self.input_feed:
+                    emb_t = torch.cat([emb_t, output], 1)
+                output, hidden = self.rnn(emb_t, hidden)
+                output, attn = self.attn(output, context.t())
+                output = self.dropout(output)
+                # print('output: ' + str(output))
+                # todo: put the generation
+                out_t = self.generator(output, hidden)
+                # print('output: ' + str(output))
+                if self.opt.st_conditioning:
+                    # print('out_t: ' + str(out_t))
+                    pred_t_data = out_t.data.cpu().numpy()
+                    argmaxed_preds = np.argmax(pred_t_data, axis=1)
 
-        for emb_t in emb.chunk(emb.size(0)):
-            emb_t = emb_t.squeeze(0)
-            if self.input_feed:
-                emb_t = torch.cat([emb_t, output], 1)
-            output, hidden = self.rnn(emb_t, hidden)
-            output, attn = self.attn(output, context.t())
-            output = self.dropout(output)
-            outputs += [output]
+                    argmaxed_preds = torch.from_numpy(argmaxed_preds)
+                    argmaxed_preds = Variable(argmaxed_preds)
+                    # print('argmaxed_preds: ' + str(argmaxed_preds))
+                    emb_t = self.word_lut(argmaxed_preds)
+                else:
+                    emb_t = self.word_lut_unsup(out_t)
+                    # print('emb_t: ' + str(emb_t))
 
-        outputs = torch.stack(outputs)
+                outputs += [out_t]
+
+            outputs = torch.stack(outputs)
+            outputs = outputs.view(outputs.size(0)*outputs.size(1), outputs.size(2))
         return outputs, hidden, attn
 
 class TempEstimator(nn.Module):
@@ -160,9 +177,86 @@ class TempEstimator(nn.Module):
 
         return temp
 
+
+class Generator(nn.Module):
+    def __init__(self, opt, dicts, temp_estimator=None):
+        super(Generator, self).__init__()
+        self.opt = opt
+        self.linear = nn.Linear(opt.rnn_size, dicts.size())
+        self.temp_estimator = temp_estimator
+        self.tau0 = 1  # initial temperature
+        self.eps = 1e-20
+        self.temperature = self.tau0
+        self.ANNEAL_RATE = 0.00003
+        self.MIN_TEMP = 0.5
+        self.iter_cnt = 0
+
+    def set_generate(self, enabled):
+        self.generate = enabled
+
+    def set_gumbel(self, enabled):
+        self.opt.use_gumbel = enabled
+
+    def set_tau(self, val):
+        self.tau = val
+    def anneal_tau_temp(self):
+        # Anneal temperature tau
+        self.temperature = np.maximum(self.tau0 * np.exp(-self.ANNEAL_RATE * self.iter_cnt * self.opt.batch_size), self.MIN_TEMP)
+
+    def get_noise(self, input):
+        noise = torch.rand(input.size())
+        if self.opt.cuda:
+            noise = noise.cuda()
+        noise.add_(self.eps).log_().neg_()
+        noise.add_(self.eps).log_().neg_()
+        noise = Variable(noise)
+        return noise
+
+    def estim_sampler(self, input, temp_estim=None):
+        noise = self.get_noise(input)
+        x = (input + noise)
+
+        if temp_estim:
+            x = x / temp_estim.repeat(x.size())
+        else:
+            x = x / self.temperature
+        return x.view_as(input)
+
+    def sampler(self, input):
+        noise = self.get_noise(input)
+        x = (input + noise) / self.temperature
+        if self.opt.ST:
+            # Use ST gumbel-softmax
+            y_onehot = torch.FloatTensor(x.size())
+            if self.opt.cuda:
+                y_onehot = y_onehot.cuda()
+            y_onehot.zero_()
+            max, idx = torch.max(x, 1)
+            y_onehot.scatter_(1, idx.data, 1)
+            return Variable(y_onehot).detach()
+        else:
+            return x.view_as(input)
+
+    def forward(self, input, dec_hidden):
+        out = self.linear(input)
+        if self.opt.use_gumbel:
+            if self.opt.estimate_temp:
+                h = dec_hidden[0].view(self.opt.layers * self.opt.batch_size * self.opt.rnn_size)
+                if self.opt.brnn:
+                    h1 = dec_hidden[1].view(self.opt.layers * self.opt.batch_size * self.opt.rnn_size)
+                    h = torch.cat([h, h1], 0)
+                temp_estim = self.temp_estimator(h.unsqueeze(0))
+                temp_estim = temp_estim + 0.5
+                self.temperature = temp_estim.data[0][0]
+                out = self.estim_sampler(out, temp_estim)
+            else:
+                out = self.estim_sampler(out)
+
+        return out
+
 class G(nn.Module):
 
-    def __init__(self, opt, encoder, decoder, generator, temp_estimator=None):
+    def __init__(self, opt, encoder, decoder, generator=None, temp_estimator=None):
         super(G, self).__init__()
         self.log = {}
         self.log['distances'] = []
@@ -190,7 +284,8 @@ class G(nn.Module):
 
     def make_init_decoder_output(self, context):
         batch_size = context.size(1)
-        h_size = (self.opt.max_sent_length, batch_size, self.decoder.hidden_size)
+        # h_size = (self.opt.max_sent_length, batch_size, self.decoder.hidden_size)
+        h_size = (batch_size, self.decoder.hidden_size)
         return Variable(context.data.new(*h_size).zero_(), requires_grad=False)
 
     def _fix_enc_hidden(self, h):
@@ -241,7 +336,7 @@ class G(nn.Module):
         else:
             return x.view_as(input)
 
-    def forward(self, previous_out, input, eval=False):
+    def forward(self, input, eval=False):
         src = input[0]
         tgt = input[1][:-1]  # exclude last target from inputs
         enc_hidden, context = self.encoder(src)
@@ -250,8 +345,9 @@ class G(nn.Module):
         enc_hidden = (self._fix_enc_hidden(enc_hidden[0]),
                       self._fix_enc_hidden(enc_hidden[1]))
 
-        out, dec_hidden, _attn = self.decoder(previous_out, tgt, enc_hidden, context, init_output, eval)
-        if self.generate:
+        out, dec_hidden, _attn = self.decoder(tgt, enc_hidden, context, init_output, eval)
+
+        if self.opt.supervision:
             out = out.view(-1, out.size(2))
             out = self.generator(out)
             if self.opt.use_gumbel:
@@ -266,7 +362,7 @@ class G(nn.Module):
                     out = self.estim_sampler(out, temp_estim)
                 else:
                     out = self.estim_sampler(out)
-
+        # print('out: ' + str(out))
         return out
 
 class D(nn.Module):

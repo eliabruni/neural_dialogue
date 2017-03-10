@@ -33,13 +33,15 @@ parser.add_argument('-wasser', type=bool, default=False,
                     help='Use wasserstein optimization')
 parser.add_argument('-bgan', type=bool, default=False,
                     help='Use boundary seeking gan')
+parser.add_argument('-st_conditioning', type=bool, default=False,
+                    help='Use st for conditioning generation')
 
 ## G options
 parser.add_argument('-layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
-parser.add_argument('-rnn_size', type=int, default=50,
+parser.add_argument('-rnn_size', type=int, default=100,
                     help='Size of LSTM hidden states')
-parser.add_argument('-word_vec_size', type=int, default=50,
+parser.add_argument('-word_vec_size', type=int, default=100,
                     help='Word embedding sizes')
 parser.add_argument('-input_feed', type=int, default=0,
                     help="""Feed the context vector at each time step as
@@ -65,7 +67,7 @@ parser.add_argument('-estimate_temp', type=bool, default=False,
                     help='Use automatic estimation of temperature annealing for gumbel')
 
 ## D options
-parser.add_argument('-D_rnn_size', type=int, default=10,
+parser.add_argument('-D_rnn_size', type=int, default=200,
                     help='D: Size fo LSTM hidden states')
 parser.add_argument('-D_dropout', type=float, default=0.3,
                     help='Dropout probability; applied between LSTM stacks.')
@@ -156,12 +158,11 @@ def eval(G, criterion, data, dataset):
     G.eval()
     if not opt.supervision:
         G.set_gumbel(False)
-    previous_out = None
     for i in range(len(data)):
         batch = data[i] # must be batch first for gather/scatter in DataParallel
         sources = batch[0]
         targets = batch[1][1:]  # exclude <s> from targets
-        outputs = G(previous_out, batch, eval=True)
+        outputs = G(batch, eval=True)
         log_pred = i % (opt.log_interval/5) == 0 and i > 0
         _, _, loss  = memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, False, True)
 
@@ -315,8 +316,6 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
     fake_label = 0
     start_time = time.time()
 
-    previous_out = None
-
     def trainEpoch(epoch):
 
         # shuffle mini batch order
@@ -325,15 +324,14 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
         total_loss, report_loss = 0, 0
         total_words, report_words = 0, 0
         start = time.time()
-        previous_out = None
+
+
+        previous_out = Variable(torch.LongTensor(opt.max_sent_length, opt.batch_size).zero_().fill_(onmt.Constants.BOS))
         for i in range(len(trainData)):
 
             batchIdx = batchOrder[i] if epoch >= opt.curriculum else i
             batch = trainData[batchIdx]
-            outputs = G(previous_out, batch, eval=False)
-            # previous_out = outputs.view(outputs.size(0) / opt.batch_size, opt.batch_size, outputs.size(1)).detach()
-            previous_out = outputs.detach()
-
+            outputs = G(batch, eval=False)
             sources = batch[0]
             targets = batch[1][1:]  # exclude <s> from targets
 
@@ -483,29 +481,29 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
     for epoch in range(opt.start_epoch, opt.epochs + 1):
 
-        if epoch == 1:
-            valid_loss = eval(G, cxt_criterion, validData, dataset)
-            valid_ppl = math.exp(min(valid_loss, 100))
-            logger.info('Initial validation perplexity: %g' % valid_ppl)
+        # if epoch == 1:
+        #     valid_loss = eval(G, cxt_criterion, validData, dataset)
+        #     valid_ppl = math.exp(min(valid_loss, 100))
+        #     logger.info('Initial validation perplexity: %g' % valid_ppl)
 
         #  (1) train for one epoch on the training set
         train_loss = trainEpoch(epoch)
         logger.info('Semi-supervision train loss: %g' % train_loss)
 
-        valid_loss = eval(G, cxt_criterion, validData, dataset)
-        valid_ppl = math.exp(min(valid_loss, 100))
-        logger.info('Validation perplexity: %g' % valid_ppl)
+        # valid_loss = eval(G, cxt_criterion, validData, dataset)
+        # valid_ppl = math.exp(min(valid_loss, 100))
+        # logger.info('Validation perplexity: %g' % valid_ppl)
 
         #  (4) drop a checkpoint
-        checkpoint = {
-            'model': G,
-            'dicts': dataset['dicts'],
-            'opt': opt,
-            'epoch': epoch,
-            'optim': optimizerG,
-        }
-        torch.save(checkpoint,
-                   '%s_e%d_%.2f.pt' % (opt.save_model, epoch, valid_ppl))
+        # checkpoint = {
+        #     'model': G,
+        #     'dicts': dataset['dicts'],
+        #     'opt': opt,
+        #     'epoch': epoch,
+        #     'optim': optimizerG,
+        # }
+        # torch.save(checkpoint,
+        #            '%s_e%d_%.2f.pt' % (opt.save_model, epoch, valid_ppl))
 
 
 def main():
@@ -530,12 +528,19 @@ def main():
 
     if opt.train_from is None:
         encoder = onmt.Models.Encoder(opt, dicts['src'])
-        decoder = onmt.Models.Decoder(opt, dicts['tgt'])
-        generator = nn.Sequential(
-            nn.Linear(opt.rnn_size, dicts['tgt'].size()))
         temp_estimator = None
-        if opt.estimate_temp:
-            temp_estimator = onmt.Models.TempEstimator(opt)
+        if opt.supervision:
+            decoder = onmt.Models.Decoder(opt, dicts['tgt'])
+            generator = nn.Sequential(
+            nn.Linear(opt.rnn_size, dicts['tgt'].size()))
+            if opt.estimate_temp:
+                temp_estimator = onmt.Models.TempEstimator(opt)
+        else:
+            temp_estimator = None
+            if opt.estimate_temp:
+                temp_estimator = onmt.Models.TempEstimator(opt)
+            generator = onmt.Models.Generator(opt, dicts['tgt'], temp_estimator)
+            decoder = onmt.Models.Decoder(opt, dicts['tgt'], generator)
 
         G = onmt.Models.G(opt, encoder, decoder, generator, temp_estimator)
         G.set_generate(True)
