@@ -23,7 +23,7 @@ parser.add_argument('-save_model', default='model',
 parser.add_argument('-train_from',
                     help="""If training from a checkpoint then this is the
                     path to the pretrained model.""")
-parser.add_argument('-max_sent_length', default=20,
+parser.add_argument('-max_sent_length', default=50,
                     help='Maximum sentence length.')
 
 # GAN options
@@ -181,7 +181,26 @@ def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, log_pr
     loss = 0
     fake, real = None, None
 
-    if opt.supervision or eval:
+
+    if eval:
+        pred_t = F.log_softmax(outputs)
+        # print('pred_t: ' + str(pred_t))
+        pred_t = pred_t.view(pred_t.size(0) / opt.batch_size, opt.batch_size, pred_t.size(1))
+        # print('pred_t: ' + str(pred_t))
+        pred_t = pred_t[:targets.size(0),:,:]
+        pred_t = pred_t.view(pred_t.size(0) * pred_t.size(1), pred_t.size(2))
+        # print('pred_t: ' + str(pred_t))
+
+        # print('targets: ' + str(targets))
+        if log_pred:
+            log_predictions(pred_t, targets, G.log['distances'], dataset['dicts']['tgt'])
+        targ_t = targets.contiguous()
+        loss_t = criterion(pred_t, targ_t.view(-1))
+        loss += loss_t.data[0]
+        if not eval:
+            loss_t.div(opt.batch_size).backward()
+
+    if opt.supervision:
         pred_t = F.log_softmax(outputs)
 
         if log_pred:
@@ -492,9 +511,9 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
         train_loss = trainEpoch(epoch)
         logger.info('Semi-supervision train loss: %g' % train_loss)
 
-        # valid_loss = eval(G, cxt_criterion, validData, dataset)
-        # valid_ppl = math.exp(min(valid_loss, 100))
-        # logger.info('Validation perplexity: %g' % valid_ppl)
+        valid_loss = eval(G, cxt_criterion, validData, dataset)
+        valid_ppl = math.exp(min(valid_loss, 100))
+        logger.info('Validation perplexity: %g' % valid_ppl)
 
         #  (4) drop a checkpoint
         # checkpoint = {

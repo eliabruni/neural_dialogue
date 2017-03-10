@@ -86,8 +86,8 @@ class Decoder(nn.Module):
         self.word_lut = nn.Embedding(dicts.size(),
                                   opt.word_vec_size,
                                   padding_idx=onmt.Constants.PAD)
-
-        self.word_lut_unsup = nn.Linear(dicts.size(), opt.word_vec_size)
+        if not self.opt.st_conditioning:
+            self.word_lut_unsup = nn.Linear(dicts.size(), opt.word_vec_size)
 
         self.rnn = StackedLSTM(opt.layers, input_size, opt.rnn_size, opt.dropout)
         self.attn = onmt.modules.GlobalAttention(opt.rnn_size)
@@ -102,7 +102,7 @@ class Decoder(nn.Module):
 
     def forward(self, input, hidden, context, init_output, eval=False):
 
-        if eval or self.opt.supervision:
+        if self.opt.supervision:
             emb = self.word_lut(input)
 
 
@@ -368,7 +368,6 @@ class G(nn.Module):
                     out = self.estim_sampler(out, temp_estim)
                 else:
                     out = self.estim_sampler(out)
-        # print('out: ' + str(out))
         return out
 
 class D(nn.Module):
