@@ -7,7 +7,7 @@ import math
 import time
 import numpy as np
 import torch.nn.functional as F
-# import numba
+import numba
 import logging
 from torch import optim
 
@@ -41,9 +41,9 @@ parser.add_argument('-st_conditioning', type=bool, default=False,
 ## G options
 parser.add_argument('-layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
-parser.add_argument('-rnn_size', type=int, default=5,
+parser.add_argument('-rnn_size', type=int, default=10,
                     help='Size of LSTM hidden states')
-parser.add_argument('-word_vec_size', type=int, default=5,
+parser.add_argument('-word_vec_size', type=int, default=10,
                     help='Word embedding sizes')
 parser.add_argument('-input_feed', type=int, default=0,
                     help="""Feed the context vector at each time step as
@@ -71,7 +71,7 @@ parser.add_argument('-estimate_temp', type=bool, default=False,
                     help='Use automatic estimation of temperature annealing for gumbel')
 
 ## D options
-parser.add_argument('-D_rnn_size', type=int, default=5,
+parser.add_argument('-D_rnn_size', type=int, default=10,
                     help='D: Size fo LSTM hidden states')
 parser.add_argument('-D_dropout', type=float, default=0.3,
                     help='Dropout probability; applied between LSTM stacks.')
@@ -241,7 +241,7 @@ def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, log_pr
 
 def lev_dist(source, target):
 
-    # @numba.jit("f4(i8[:], i8[:])", nopython=True, cache=True, target="cpu")
+    @numba.jit("f4(i8[:], i8[:])", nopython=True, cache=True, target="cpu")
     def jitted_lev_dist(vec1, vec2):
         # Prepare a matrix
         dist = np.zeros((vec1.size + 1, vec2.size + 1))
