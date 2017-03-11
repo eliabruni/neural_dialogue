@@ -23,7 +23,7 @@ parser.add_argument('-save_model', default='model',
 parser.add_argument('-train_from',
                     help="""If training from a checkpoint then this is the
                     path to the pretrained model.""")
-parser.add_argument('-max_sent_length', default=50,
+parser.add_argument('-max_sent_length', default=20,
                     help='Maximum sentence length.')
 
 # GAN options
