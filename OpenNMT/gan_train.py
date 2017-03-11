@@ -23,7 +23,7 @@ parser.add_argument('-save_model', default='model',
 parser.add_argument('-train_from',
                     help="""If training from a checkpoint then this is the
                     path to the pretrained model.""")
-parser.add_argument('-max_sent_length', default=20,
+parser.add_argument('-max_sent_length', default=30,
                     help='Maximum sentence length.')
 
 # GAN options
@@ -353,8 +353,6 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
         total_words, report_words = 0, 0
         start = time.time()
 
-
-        previous_out = Variable(torch.LongTensor(opt.max_sent_length, opt.batch_size).zero_().fill_(onmt.Constants.BOS))
         for i in range(len(trainData)):
 
             batchIdx = batchOrder[i] if epoch >= opt.curriculum else i
