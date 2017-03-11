@@ -75,6 +75,7 @@ class Decoder(nn.Module):
 
     def __init__(self, opt, dicts, generator=None):
         self.opt = opt
+        self.dicts = dicts
         self.layers = opt.layers
         self.input_feed = opt.input_feed
 
@@ -110,8 +111,6 @@ class Decoder(nn.Module):
 
         if self.opt.supervision:
             emb = self.word_lut(input)
-
-
             batch_size = input.size(1)
 
             h_size = (batch_size, self.hidden_size)
@@ -133,17 +132,23 @@ class Decoder(nn.Module):
                 outputs += [output]
             outputs = torch.stack(outputs)
         else:
-
-            emb_t = Variable(torch.LongTensor(1, self.opt.batch_size).zero_().fill_(onmt.Constants.BOS))
-            batch_size = emb_t.size(1)
-            h_size = (batch_size, self.hidden_size)
-            output = Variable(emb_t.data.new(*h_size).zero_(), requires_grad=False)
-            outputs = []
-            output = init_output
+            if self.opt.st_conditioning:
+                emb_t = Variable(torch.LongTensor(1, self.opt.batch_size).zero_().fill_(onmt.Constants.BOS))
+            else:
+                emb_t = torch.FloatTensor(self.opt.batch_size, self.dicts.size()).zero_()
+                emb_t[:, onmt.Constants.BOS] = 1
+                emb_t = Variable(emb_t)
 
             if self.opt.cuda:
                 emb_t = emb_t.cuda()
-            emb_t=self.word_lut(emb_t)
+
+            if self.opt.st_conditioning:
+                emb_t = self.word_lut(emb_t)
+            else:
+                emb_t = self.word_lut_unsup(emb_t)
+
+            outputs = []
+            output = init_output
             for i in range(self.opt.max_sent_length):
                 emb_t = emb_t.squeeze(0)
                 if self.input_feed:
@@ -262,12 +267,10 @@ class TempEstimator(nn.Module):
             self.linear1 = nn.Linear(opt.rnn_size*opt.layers*opt.batch_size*2, 1)
         else:
             self.linear1 = nn.Linear(opt.rnn_size * opt.layers * opt.batch_size, 1)
-        # self.relu = nn.ReLU()
         self.softplus = nn.Softplus()
 
     def forward(self, input):
         out = self.linear1(input)
-        # temp = self.relu(out)
         temp = self.softplus(out)
 
         return temp

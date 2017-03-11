@@ -43,7 +43,7 @@ parser.add_argument('-layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
 parser.add_argument('-rnn_size', type=int, default=10,
                     help='Size of LSTM hidden states')
-parser.add_argument('-word_vec_size', type=int, default=10,
+parser.add_argument('-word_vec_size', type=int, default=2,
                     help='Word embedding sizes')
 parser.add_argument('-input_feed', type=int, default=0,
                     help="""Feed the context vector at each time step as
@@ -367,7 +367,6 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                 _, _, loss = memoryEfficientLoss(
                     G, outputs, sources, targets, dataset, cxt_criterion, log_pred)
 
-
                 # update the parameters
                 grad_norm = optimizerG.step()
                 report_loss += loss
@@ -435,9 +434,9 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
                         D_G_z2 = D_fake.data.mean()
 
-                        # print('ITERATION: ')
-                        # for p in G.parameters():
-                        #     print('p.grad.data: ' + str(p.grad.data))
+                        print('ITERATION: ')
+                        for p in G.parameters():
+                            print('p.grad.data: ' + str(p.grad.data))
 
                         optimizerG.step()
 
@@ -613,7 +612,6 @@ def main():
         nParams = sum([p.nelement() for p in D.parameters()])
         logger.info('* number of D parameters: %d' % nParams)
     trainModel(G, trainData, validData, dataset, optimizerG, D, optimizerD)
-
 
 
 if __name__ == "__main__":
