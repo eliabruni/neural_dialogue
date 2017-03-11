@@ -154,10 +154,9 @@ class Decoder(nn.Module):
                 output, attn = self.attn(output, context.t())
 
                 output = self.dropout(output)
-                # todo: put the generation
                 out_t = self.generator(output, hidden)
 
-                #  This mask is applied to..
+                # Masking PAD
                 out_t[:,onmt.Constants.PAD] = 0
 
                 out_t_sofmtmaxed = F.softmax(out_t)

@@ -312,6 +312,8 @@ def one_hot(G, input, num_input_symbols, temp_estim=None):
             y_onehot.scatter_(1, input[i].unsqueeze(1), num_input_symbols)
             pert = G.sampler(Variable(y_onehot))
             pert = F.softmax(pert)
+            # Masking PAD
+            pert.data[:, onmt.Constants.PAD] = 0
             one_hot_tensor[i] = pert.data
 
     one_hot_tensor = torch.transpose(one_hot_tensor,1,0)
