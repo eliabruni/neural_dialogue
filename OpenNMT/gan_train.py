@@ -224,10 +224,6 @@ def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, log_pr
         noise_targets = one_hot(G, targets.data,
                                      dataset['dicts']['tgt'].size())
 
-        #  This mask is applied to..
-        # noise_sources[:, onmt.Constants.PAD] = 0
-        # noise_targets[:, onmt.Constants.PAD] = 0
-
 
         if opt.cuda:
             noise_sources = noise_sources.cuda()
