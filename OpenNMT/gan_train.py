@@ -311,9 +311,11 @@ def one_hot(G, input, num_input_symbols, temp_estim=None):
             # Use soft gumbel-softmax
             y_onehot.scatter_(1, input[i].unsqueeze(1), num_input_symbols)
             pert = G.generator.sampler(Variable(y_onehot))
-            pert = F.softmax(pert)
-            # Masking PAD
+
+            # Masking PAD: we do it before softmax, as in generation
             pert.data[:, onmt.Constants.PAD] = 0
+            pert = F.softmax(pert)
+
             one_hot_tensor[i] = pert.data
 
     one_hot_tensor = torch.transpose(one_hot_tensor,1,0)
