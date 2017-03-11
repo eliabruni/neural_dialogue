@@ -310,7 +310,7 @@ def one_hot(G, input, num_input_symbols, temp_estim=None):
         else:
             # Use soft gumbel-softmax
             y_onehot.scatter_(1, input[i].unsqueeze(1), num_input_symbols)
-            pert = G.sampler(Variable(y_onehot))
+            pert = G.generator.sampler(Variable(y_onehot))
             pert = F.softmax(pert)
             # Masking PAD
             pert.data[:, onmt.Constants.PAD] = 0
@@ -574,7 +574,6 @@ def main():
             decoder = onmt.Models.Decoder(opt, dicts['tgt'], generator)
 
         G = onmt.Models.G(opt, encoder, decoder, generator, temp_estimator)
-        G.set_generate(True)
         # for p in G.parameters():
         #     p.data.uniform_(-opt.param_init, opt.param_init)
 

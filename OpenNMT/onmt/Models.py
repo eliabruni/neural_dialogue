@@ -282,7 +282,6 @@ class G(nn.Module):
         self.encoder = encoder
         self.decoder = decoder
         self.generator = generator
-        self.temp_estimator = temp_estimator
         self.generate = False
         self.tau0 = 1 # initial temperature
         self.eps = 1e-20
@@ -296,15 +295,6 @@ class G(nn.Module):
         # https://arxiv.org/abs/1611.01462
         if self.opt.tied:
             self.generator.weight = self.encoder.word_lut.weight
-
-    def set_generate(self, enabled):
-        self.generate = enabled
-
-    def set_gumbel(self, enabled):
-        self.opt.use_gumbel = enabled
-
-    def set_tau(self, val):
-        self.tau = val
 
     def make_init_decoder_output(self, context):
         batch_size = context.size(1)
@@ -322,43 +312,6 @@ class G(nn.Module):
         else:
             return h
 
-    def anneal_tau_temp(self):
-        # Anneal temperature tau
-        self.temperature = np.maximum(self.tau0 * np.exp(-self.ANNEAL_RATE * self.iter_cnt * self.opt.batch_size), self.MIN_TEMP)
-
-    def get_noise(self, input):
-        noise = torch.rand(input.size())
-        if self.opt.cuda:
-            noise = noise.cuda()
-        noise.add_(self.eps).log_().neg_()
-        noise.add_(self.eps).log_().neg_()
-        noise = Variable(noise)
-        return noise
-
-    def estim_sampler(self, input, temp_estim=None):
-        noise = self.get_noise(input)
-        x = (input + noise)
-
-        if temp_estim:
-            x = x / temp_estim.repeat(x.size())
-        else:
-            x = x / self.temperature
-        return x.view_as(input)
-
-    def sampler(self, input):
-        noise = self.get_noise(input)
-        x = (input + noise) / self.temperature
-        if self.opt.ST:
-            # Use ST gumbel-softmax
-            y_onehot = torch.FloatTensor(x.size())
-            if self.opt.cuda:
-                y_onehot = y_onehot.cuda()
-            y_onehot.zero_()
-            max, idx = torch.max(x, 1)
-            y_onehot.scatter_(1, idx.data, 1)
-            return Variable(y_onehot).detach()
-        else:
-            return x.view_as(input)
 
     def forward(self, input, eval=False):
         src = input[0]
