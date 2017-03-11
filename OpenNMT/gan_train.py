@@ -7,7 +7,7 @@ import math
 import time
 import numpy as np
 import torch.nn.functional as F
-import numba
+# import numba
 import logging
 from torch import optim
 
@@ -23,7 +23,7 @@ parser.add_argument('-save_model', default='model',
 parser.add_argument('-train_from',
                     help="""If training from a checkpoint then this is the
                     path to the pretrained model.""")
-parser.add_argument('-max_sent_length', default=30,
+parser.add_argument('-max_sent_length', default=50,
                     help='Maximum sentence length.')
 
 # GAN options
@@ -241,7 +241,7 @@ def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, log_pr
 
 def lev_dist(source, target):
 
-    @numba.jit("f4(i8[:], i8[:])", nopython=True, cache=True, target="cpu")
+    # @numba.jit("f4(i8[:], i8[:])", nopython=True, cache=True, target="cpu")
     def jitted_lev_dist(vec1, vec2):
         # Prepare a matrix
         dist = np.zeros((vec1.size + 1, vec2.size + 1))
