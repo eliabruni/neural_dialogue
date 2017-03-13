@@ -328,7 +328,7 @@ def one_hot(G, input, num_input_symbols, H=None):
         one_hot_tensor = H(one_hot_tensor)
         one_hot_tensor = G.generator.sampler(one_hot_tensor).data
         one_hot_tensor = one_hot_tensor.contiguous().view(one_hot_tensor.size()[0]*one_hot_tensor.size()[1], one_hot_tensor.size()[2])
-        one_hot_tensor[:, onmt.Constants.PAD] = 0
+        one_hot_tensor.data[:, onmt.Constants.PAD] = 0
         return F.softmax(Variable(one_hot_tensor))
 
     else:
