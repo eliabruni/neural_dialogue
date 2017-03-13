@@ -322,7 +322,10 @@ def one_hot(G, input, num_input_symbols, H=None):
 
             one_hot_tensor[i] = pert.data
     if opt.hallucinate:
-        one_hot_tensor = H(Variable(one_hot_tensor, requires_grad=True))
+        one_hot_tensor = Variable(one_hot_tensor, requires_grad=True)
+        if opt.cuda:
+            one_hot_tensor = one_hot_tensor.cuda()
+        one_hot_tensor = H(one_hot_tensor)
         one_hot_tensor = G.generator.sampler(one_hot_tensor).data
         one_hot_tensor = one_hot_tensor.contiguous().view(one_hot_tensor.size()[0]*one_hot_tensor.size()[1], one_hot_tensor.size()[2])
         one_hot_tensor[:, onmt.Constants.PAD] = 0

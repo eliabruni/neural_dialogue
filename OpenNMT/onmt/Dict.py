@@ -23,6 +23,7 @@ class Dict(object):
     def loadFile(self, filename):
         for line in open(filename):
             fields = line.split()
+            print('fields: ' + str(fields))
             label = fields[0]
             idx = int(fields[1])
             self.add(label, idx)
