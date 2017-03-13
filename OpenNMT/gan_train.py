@@ -250,8 +250,7 @@ def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, halluc
         if opt.hallucinate:
             pert = G.generator.sampler(hallucination)
             # Masking PAD: we do it before softmax, as in generation
-            #todo fix this!
-            # pert.data[:, onmt.Constants.PAD] = 0
+            pert.data[:, onmt.Constants.PAD] = 0
             noise_targets = F.softmax(pert)
 
         else:
