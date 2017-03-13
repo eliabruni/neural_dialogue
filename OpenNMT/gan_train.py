@@ -43,9 +43,9 @@ parser.add_argument('-hallucinate', type=bool, default=False,
 ## G options
 parser.add_argument('-layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
-parser.add_argument('-rnn_size', type=int, default=100,
+parser.add_argument('-rnn_size', type=int, default=5,
                     help='Size of LSTM hidden states')
-parser.add_argument('-word_vec_size', type=int, default=100,
+parser.add_argument('-word_vec_size', type=int, default=5,
                     help='Word embedding sizes')
 parser.add_argument('-input_feed', type=int, default=0,
                     help="""Feed the context vector at each time step as
@@ -73,7 +73,7 @@ parser.add_argument('-estimate_temp', type=bool, default=False,
                     help='Use automatic estimation of temperature annealing for gumbel')
 
 ## D options
-parser.add_argument('-D_rnn_size', type=int, default=100,
+parser.add_argument('-D_rnn_size', type=int, default=5,
                     help='D: Size fo LSTM hidden states')
 parser.add_argument('-D_dropout', type=float, default=0.3,
                     help='Dropout probability; applied between LSTM stacks.')
@@ -250,7 +250,7 @@ def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, halluc
         if opt.hallucinate:
             pert = G.generator.sampler(hallucination)
             # Masking PAD: we do it before softmax, as in generation
-            pert.data[:, onmt.Constants.PAD] = 0
+            # pert.data[:, onmt.Constants.PAD] = 0
             noise_targets = F.softmax(pert)
 
         else:
@@ -342,7 +342,7 @@ def one_hot(G, input, num_input_symbols):
             pert = G.generator.sampler(y_onehot)
 
             # Masking PAD: we do it before softmax, as in generation
-            pert.data[:, onmt.Constants.PAD] = 0
+            # pert.data[:, onmt.Constants.PAD] = 0
             pert = F.softmax(pert)
 
             one_hot_tensor[i] = pert.data
