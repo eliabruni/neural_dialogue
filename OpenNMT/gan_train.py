@@ -43,9 +43,9 @@ parser.add_argument('-hallucinate', type=bool, default=False,
 ## G options
 parser.add_argument('-layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
-parser.add_argument('-rnn_size', type=int, default=10,
+parser.add_argument('-rnn_size', type=int, default=100,
                     help='Size of LSTM hidden states')
-parser.add_argument('-word_vec_size', type=int, default=10,
+parser.add_argument('-word_vec_size', type=int, default=100,
                     help='Word embedding sizes')
 parser.add_argument('-input_feed', type=int, default=0,
                     help="""Feed the context vector at each time step as
@@ -73,7 +73,7 @@ parser.add_argument('-estimate_temp', type=bool, default=False,
                     help='Use automatic estimation of temperature annealing for gumbel')
 
 ## D options
-parser.add_argument('-D_rnn_size', type=int, default=10,
+parser.add_argument('-D_rnn_size', type=int, default=100,
                     help='D: Size fo LSTM hidden states')
 parser.add_argument('-D_dropout', type=float, default=0.3,
                     help='Dropout probability; applied between LSTM stacks.')
@@ -431,28 +431,30 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                 log_pred = i % (opt.log_interval) == 0 and i > 0
 
                 if opt.hallucinate:
-                    H.zero_grad()
-                    h_outputs = H(batch)
-                    targets = batch[1][1:]  # exclude <s> from targets
-                    loss, gradOutput = H_memoryEfficientLoss(
-                        h_outputs, targets, H.generator, cxt_criterion)
+                    for _ in range(5):
+                        H.zero_grad()
+                        h_outputs = H(batch)
+                        targets = batch[1][1:]  # exclude <s> from targets
+                        loss, gradOutput = H_memoryEfficientLoss(
+                            h_outputs, targets, H.generator, cxt_criterion)
+                        h_outputs.backward(gradOutput)
+                        # update the parameters
+                        grad_norm = optimizerH.step()
 
-                    report_loss += loss
-                    total_loss += loss
-                    num_words = targets.data.ne(onmt.Constants.PAD).sum()
-                    total_words += num_words
-                    report_words += num_words
-                    if i % opt.log_interval == 0 and i > 0:
-                        print("[HALLUCINATOR] Epoch %2d, %5d/%5d batches; perplexity: %6.2f; %3.0f tokens/s" %
-                              (epoch, i, len(trainData),
-                               math.exp(report_loss / report_words),
-                               report_words / (time.time() - start)))
+                        report_loss += loss
+                        total_loss += loss
+                        num_words = targets.data.ne(onmt.Constants.PAD).sum()
+                        total_words += num_words
+                        report_words += num_words
+                        if i % opt.log_interval == 0 and i > 0:
+                            print("[HALLUCINATOR] Epoch %2d, %5d/%5d batches; perplexity: %6.2f; %3.0f tokens/s" %
+                                  (epoch, i, len(trainData),
+                                   math.exp(report_loss / report_words),
+                                   report_words / (time.time() - start)))
 
                         report_loss = report_words = 0
 
-                        h_outputs.backward(gradOutput)
-                    # update the parameters
-                    grad_norm = optimizerH.step()
+
                     h_outputs = H(batch)
                     h_outputs = h_outputs.view(-1, h_outputs.size(2))
                     hallucination = H.generator(h_outputs)
@@ -669,8 +671,7 @@ def main():
             if opt.wasser:
                 optimizerG = optim.RMSprop(G.parameters(), lr=5e-5)
                 optimizerD = optim.RMSprop(D.parameters(), lr=5e-5)
-                if opt.hallucinate:
-                    optimizerH = optim.RMSprop(D.parameters(), lr=5e-5)
+
             else:
                 optimizerD = optim.Adam(D.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
 
