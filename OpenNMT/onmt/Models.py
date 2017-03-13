@@ -170,7 +170,7 @@ class Decoder(nn.Module):
                     out_t, _ = self.generator(output, hidden)
 
                 # Masking PAD
-                out_t[:,onmt.Constants.PAD] = 0
+                out_t.data[:,onmt.Constants.PAD] = 0
 
                 out_t_sofmtmaxed = F.softmax(out_t)
                 if self.opt.st_conditioning:
