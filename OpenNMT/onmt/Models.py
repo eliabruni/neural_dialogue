@@ -204,7 +204,7 @@ class Decoder(nn.Module):
                 # print('out_ts: ' + str(out_ts))
                 # hallucinate_loss = H_crit(hallucinate_preds, out_ts.detach(), Variable(torch.ones(hallucinate_preds.size(0))))
                 hallucinate_loss = H_crit(hallucinate_preds, out_ts.detach())
-                # print('hallucinate_loss: ' + str(hallucinate_loss))
+                print('hallucinate_loss: ' + str(hallucinate_loss))
                 hallucinate_loss.backward()
                 optimizerH.step()
                 for p in H.parameters():
