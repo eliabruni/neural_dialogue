@@ -626,10 +626,14 @@ def main():
         G.cuda()
         if not opt.supervision:
             D.cuda()
+            if opt.hallucinate:
+                H.cuda()
     else:
         G.cpu()
         if not opt.supervision:
             D.cpu()
+            if opt.hallucinate:
+                H.cpu()
 
     nParams = sum([p.nelement() for p in G.parameters()])
     logger.info('* number of G parameters: %d' % nParams)

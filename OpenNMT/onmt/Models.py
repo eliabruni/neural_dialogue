@@ -282,10 +282,10 @@ class Generator(nn.Module):
             argmaxed_preds = torch.from_numpy(argmaxed_preds)
             # One hot encoding buffer that you create out of the loop and just keep reusing
             y_onehot = torch.FloatTensor(argmaxed_preds.size()[0], self.dicts.size())
-            if self.opt.cuda:
-                y_onehot = y_onehot.cuda()
             y_onehot.zero_()
             y_onehot = y_onehot.scatter_(1, argmaxed_preds.unsqueeze(1), 1)
+            if self.opt.cuda:
+                y_onehot = y_onehot.cuda()
             # y_onehot = y_onehot.scatter_(1, argmaxed_preds.unsqueeze(1), self.dicts.size())
 
         if self.opt.use_gumbel:
