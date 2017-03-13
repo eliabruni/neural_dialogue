@@ -40,7 +40,7 @@ parser.add_argument('-tgt_vocab',
                     help="Path to an existing target vocabulary")
 
 
-parser.add_argument('-seq_length', type=int, default=30,
+parser.add_argument('-seq_length', type=int, default=25,
                     help="Maximum sequence length")
 parser.add_argument('-shuffle',    type=int, default=1,
                     help="Shuffle data")
