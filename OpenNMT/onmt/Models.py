@@ -149,9 +149,7 @@ class Decoder(nn.Module):
 
             outputs = []
             output = init_output
-            if self.opt.hallucinate:
-                out_ts = []
-                y_onehots = []
+
             for i in range(self.opt.max_sent_length):
                 emb_t = emb_t.squeeze(0)
                 if self.input_feed:
@@ -162,12 +160,8 @@ class Decoder(nn.Module):
                 output, attn = self.attn(output, context.t())
 
                 output = self.dropout(output)
-                if self.opt.hallucinate:
-                    out_t,y_onehot = self.generator(output, hidden)
-                    out_ts += [out_t.clone()]
-                    y_onehots += [y_onehot]
-                else:
-                    out_t, _ = self.generator(output, hidden)
+
+                out_t, _ = self.generator(output, hidden)
 
                 # Masking PAD
                 out_t.data[:,onmt.Constants.PAD] = 0
@@ -190,25 +184,6 @@ class Decoder(nn.Module):
 
             outputs = torch.stack(outputs)
             outputs = outputs.view(outputs.size(0)*outputs.size(1), outputs.size(2))
-
-            if self.opt.hallucinate:
-                out_ts = torch.stack(out_ts)
-                out_ts = out_ts.view(out_ts.size(0) * out_ts.size(1), out_ts.size(2))
-                y_onehots = Variable(torch.stack(y_onehots))
-                # y_onehots = y_onehots.view(y_onehots.size(0) * y_onehots.size(1), y_onehots.size(2))
-                # print('y_onehots: ' + str(y_onehots))
-                hallucinate_preds = H(y_onehots)
-                hallucinate_preds = hallucinate_preds.view(hallucinate_preds.size(0) * hallucinate_preds.size(1), hallucinate_preds.size(2))
-                # hallucinate_preds = hallucinate_preds.view(hallucinate_preds.size(0) * hallucinate_preds.size(1), hallucinate_preds.size(2))
-                # print('hallucinate_preds: ' + str(hallucinate_preds))
-                # print('out_ts: ' + str(out_ts))
-                # hallucinate_loss = H_crit(hallucinate_preds, out_ts.detach(), Variable(torch.ones(hallucinate_preds.size(0))))
-                hallucinate_loss = H_crit(hallucinate_preds, out_ts.detach())
-                print('hallucinate_loss: ' + str(hallucinate_loss))
-                hallucinate_loss.backward()
-                optimizerH.step()
-                for p in H.parameters():
-                    p.data.clamp_(-0.01, 0.01)
 
         return outputs, hidden, attn
 
@@ -276,17 +251,6 @@ class Generator(nn.Module):
         out = self.linear(input)
 
         y_onehot = None
-        if self.opt.hallucinate:
-            pred_t_data = out.data.cpu().numpy()
-            argmaxed_preds = np.argmax(pred_t_data, axis=1)
-            argmaxed_preds = torch.from_numpy(argmaxed_preds)
-            # One hot encoding buffer that you create out of the loop and just keep reusing
-            y_onehot = torch.FloatTensor(argmaxed_preds.size()[0], self.dicts.size())
-            y_onehot.zero_()
-            y_onehot = y_onehot.scatter_(1, argmaxed_preds.unsqueeze(1), 1)
-            if self.opt.cuda:
-                y_onehot = y_onehot.cuda()
-            # y_onehot = y_onehot.scatter_(1, argmaxed_preds.unsqueeze(1), self.dicts.size())
 
         if self.opt.use_gumbel:
             if self.opt.estimate_temp:
@@ -386,42 +350,6 @@ class G(nn.Module):
                 else:
                     out = self.estim_sampler(out)
         return out
-
-
-class Hallucinator(nn.Module):
-
-    def __init__(self, opt, dicts):
-        self.opt = opt
-        self.vocab_size = dicts.size()
-        self.rnn_size = opt.H_rnn_size
-        super(Hallucinator, self).__init__()
-        self.unique = nn.Linear(self.vocab_size, self.vocab_size, True)
-        self.onehot_embedding = nn.Linear(self.vocab_size, self.rnn_size, True)
-        self.rnn1 = nn.LSTM(self.rnn_size, self.rnn_size, 1, bidirectional=True, dropout=opt.H_dropout)
-        # self.attn = onmt.modules.GlobalAttention(self.rnn_size*2)
-        self.l_out = nn.Linear(self.rnn_size * 2, self.vocab_size)
-
-    def forward(self, x):
-
-        onehot_embeds = self.onehot_embedding(x.contiguous().view(x.size()[0]*x.size()[1], x.size()[2]))
-        onehot_embeds = onehot_embeds.view(x.size()[0], x.size()[1], onehot_embeds.size()[1])
-
-        _batch_size = onehot_embeds.size(1)
-        h = Variable(torch.zeros(1 * 2, _batch_size, self.rnn_size))
-        if self.opt.cuda:
-            h = h.cuda()
-        c = Variable(torch.zeros(1 * 2, _batch_size, self.rnn_size))
-        if self.opt.cuda:
-            c = c.cuda()
-        outputs, (hn,_) = self.rnn1(onehot_embeds, (h, c))
-
-
-        out = self.l_out(outputs.view(outputs.size()[0] * outputs.size()[1], outputs.size()[2]))
-        # print('out: ' + str(out))
-        return out.view(outputs.size()[0], outputs.size()[1], self.vocab_size)
-
-        # out = self.unique(x.contiguous().view(x.size()[0]*x.size()[1], x.size()[2]))
-        # return out.view(x.size()[0], x.size()[1], self.vocab_size)
 
 class D(nn.Module):
     def __init__(self, opt, dicts):

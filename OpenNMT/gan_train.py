@@ -43,9 +43,9 @@ parser.add_argument('-hallucinate', type=bool, default=False,
 ## G options
 parser.add_argument('-layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
-parser.add_argument('-rnn_size', type=int, default=100,
+parser.add_argument('-rnn_size', type=int, default=10,
                     help='Size of LSTM hidden states')
-parser.add_argument('-word_vec_size', type=int, default=100,
+parser.add_argument('-word_vec_size', type=int, default=10,
                     help='Word embedding sizes')
 parser.add_argument('-input_feed', type=int, default=0,
                     help="""Feed the context vector at each time step as
@@ -73,7 +73,7 @@ parser.add_argument('-estimate_temp', type=bool, default=False,
                     help='Use automatic estimation of temperature annealing for gumbel')
 
 ## D options
-parser.add_argument('-D_rnn_size', type=int, default=100,
+parser.add_argument('-D_rnn_size', type=int, default=10,
                     help='D: Size fo LSTM hidden states')
 parser.add_argument('-D_dropout', type=float, default=0.3,
                     help='Dropout probability; applied between LSTM stacks.')
@@ -186,7 +186,28 @@ def eval(G, criterion, data, dataset):
         G.set_gumbel(True)
     return total_loss / total_words
 
-def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, H=None, log_pred=False, eval=False):
+
+def H_memoryEfficientLoss(outputs, targets, generator, crit, eval=False):
+    # compute generations one piece at a time
+    loss = 0
+    outputs = Variable(outputs.data, requires_grad=(not eval), volatile=eval)
+
+    batch_size = outputs.size(1)
+    outputs_split = torch.split(outputs, opt.max_generator_batches)
+    targets_split = torch.split(targets, opt.max_generator_batches)
+    for out_t, targ_t in zip(outputs_split, targets_split):
+        out_t = out_t.view(-1, out_t.size(2))
+        out_t = generator(out_t)
+        pred_t = F.log_softmax(out_t)
+        loss_t = crit(pred_t, targ_t.view(-1))
+        loss += loss_t.data[0]
+        if not eval:
+            loss_t.div(batch_size).backward()
+
+    grad_output = None if outputs.grad is None else outputs.grad.data
+    return loss, grad_output
+
+def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, hallucination=None, log_pred=False, eval=False):
 
     loss = 0
     fake, real = None, None
@@ -217,16 +238,25 @@ def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, H=None
             loss_t.div(opt.batch_size).backward()
 
     else:
+
         pred_t = F.softmax(outputs)
 
         if log_pred:
             log_predictions(pred_t, targets, G.log['distances'], dataset['dicts']['tgt'])
 
         noise_sources = one_hot(G, sources.data,
-                                     dataset['dicts']['src'].size(), H)
-        noise_targets = one_hot(G, targets.data,
-                                     dataset['dicts']['tgt'].size(), H)
+                                dataset['dicts']['src'].size())
 
+        if opt.hallucinate:
+            pert = G.generator.sampler(hallucination)
+            # Masking PAD: we do it before softmax, as in generation
+            #todo fix this!
+            # pert.data[:, onmt.Constants.PAD] = 0
+            noise_targets = F.softmax(pert)
+
+        else:
+            noise_targets = one_hot(G, targets.data,
+                                         dataset['dicts']['tgt'].size())
 
         if opt.cuda:
             noise_sources = noise_sources.cuda()
@@ -292,7 +322,7 @@ def log_predictions(pred_t, targ_t, distances, tgt_dict):
     logger.debug('past avg lev distance: %f, last 10 avg lev distance %f \n' % (avg_dist, avg_dist_10))
 
 
-def one_hot(G, input, num_input_symbols, H=None):
+def one_hot(G, input, num_input_symbols):
     one_hot_tensor = torch.FloatTensor(input.size()[1], input.size()[0], num_input_symbols)
     input = torch.transpose(input, 1, 0)
     for i in range(input.size()[0]):
@@ -306,10 +336,6 @@ def one_hot(G, input, num_input_symbols, H=None):
             # Use ST gumbel-softmax
             y_onehot.scatter_(1, input[i].unsqueeze(1), 1)
             one_hot_tensor[i] = y_onehot
-        elif opt.hallucinate:
-            y_onehot = y_onehot.scatter_(1, input[i].unsqueeze(1), num_input_symbols)
-            # Masking PAD: we do it before softmax, as in generation
-            one_hot_tensor[i] = y_onehot
         else:
             # Use soft gumbel-softmax
             y_onehot = Variable(y_onehot.scatter_(1, input[i].unsqueeze(1), num_input_symbols))
@@ -321,19 +347,19 @@ def one_hot(G, input, num_input_symbols, H=None):
             pert = F.softmax(pert)
 
             one_hot_tensor[i] = pert.data
-    if opt.hallucinate:
-        one_hot_tensor = Variable(one_hot_tensor, requires_grad=True)
-        if opt.cuda:
-            one_hot_tensor = one_hot_tensor.cuda()
-        one_hot_tensor = H(one_hot_tensor)
-        one_hot_tensor = G.generator.sampler(one_hot_tensor).data
-        one_hot_tensor = one_hot_tensor.contiguous().view(one_hot_tensor.size()[0]*one_hot_tensor.size()[1], one_hot_tensor.size()[2])
-        one_hot_tensor.data[:, onmt.Constants.PAD] = 0
-        return F.softmax(Variable(one_hot_tensor))
 
-    else:
-        one_hot_tensor = torch.transpose(one_hot_tensor,1,0)
-        return Variable(one_hot_tensor.contiguous().view(one_hot_tensor.size()[0]*one_hot_tensor.size()[1], one_hot_tensor.size()[2]))
+
+
+
+            # Use soft gumbel-softmax
+            # y_onehot.scatter_(1, input[i].unsqueeze(1), num_input_symbols)
+            # pert = G.generator.sampler(Variable(y_onehot))
+            # pert.data[:, onmt.Constants.PAD] = 0
+            # pert = F.softmax(pert)
+            # one_hot_tensor[i] = pert.data
+
+    one_hot_tensor = torch.transpose(one_hot_tensor,1,0)
+    return Variable(one_hot_tensor.contiguous().view(one_hot_tensor.size()[0]*one_hot_tensor.size()[1], one_hot_tensor.size()[2]))
 
 
 def clip_gradient(opt, model):
@@ -404,8 +430,37 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         # print("Real temp: %.4f, Generated temp: %.4f " % (G.generator.real_temp, learned_temp))
             else:
                 log_pred = i % (opt.log_interval) == 0 and i > 0
+
+                if opt.hallucinate:
+                    H.zero_grad()
+                    h_outputs = H(batch)
+                    targets = batch[1][1:]  # exclude <s> from targets
+                    loss, gradOutput = H_memoryEfficientLoss(
+                        h_outputs, targets, H.generator, cxt_criterion)
+
+                    report_loss += loss
+                    total_loss += loss
+                    num_words = targets.data.ne(onmt.Constants.PAD).sum()
+                    total_words += num_words
+                    report_words += num_words
+                    if i % opt.log_interval == 0 and i > 0:
+                        print("[HALLUCINATOR] Epoch %2d, %5d/%5d batches; perplexity: %6.2f; %3.0f tokens/s" %
+                              (epoch, i, len(trainData),
+                               math.exp(report_loss / report_words),
+                               report_words / (time.time() - start)))
+
+                        report_loss = report_words = 0
+
+                        h_outputs.backward(gradOutput)
+                    # update the parameters
+                    grad_norm = optimizerH.step()
+                    h_outputs = H(batch)
+                    h_outputs = h_outputs.view(-1, h_outputs.size(2))
+                    hallucination = H.generator(h_outputs)
+
+
                 fake, real, _= memoryEfficientLoss(
-                    G, outputs, sources, targets, dataset, None, H,  log_pred)
+                    G, outputs, sources, targets, dataset, None, hallucination,  log_pred)
 
                 fake = fake.contiguous().view(fake.size()[0]/opt.batch_size,opt.batch_size,fake.size()[1])
                 real = real.contiguous().view(real.size()[0]/opt.batch_size,opt.batch_size,real.size()[1])
@@ -588,11 +643,12 @@ def main():
             H = None
             H_crit= None
             if opt.hallucinate:
-                H = onmt.Models.Hallucinator(opt, dicts['tgt'])
-                for p in H.parameters():
-                    p.data.uniform_(-opt.param_init, opt.param_init)
-                H_crit = nn.MSELoss()
-                optimizerH = optim.RMSprop(H.parameters(), lr=5e-5)
+                h_encoder = onmt.Hallucinator.H_Encoder(opt, dicts['src'])
+                h_decoder = onmt.Hallucinator.H_Decoder(opt, dicts['tgt'])
+                h_generator = nn.Sequential(
+                    nn.Linear(opt.rnn_size, dicts['tgt'].size()))
+                H = onmt.Hallucinator.Hallucinator(h_encoder, h_decoder, h_generator)
+                optimizerH = optim.Adam(H.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
 
             generator = onmt.Models.Generator(opt, dicts['tgt'], temp_estimator)
             decoder = onmt.Models.Decoder(opt, dicts['tgt'], generator)
