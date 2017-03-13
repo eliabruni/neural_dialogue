@@ -37,13 +37,15 @@ parser.add_argument('-conditioning_on_gold', type=bool, default=False,
                     help='Use gold for conditioning generation')
 parser.add_argument('-st_conditioning', type=bool, default=False,
                     help='Use st for conditioning generation')
+parser.add_argument('-hallucinate', type=bool, default=False,
+                    help='Whether to use supervision')
 
 ## G options
 parser.add_argument('-layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
-parser.add_argument('-rnn_size', type=int, default=10,
+parser.add_argument('-rnn_size', type=int, default=100,
                     help='Size of LSTM hidden states')
-parser.add_argument('-word_vec_size', type=int, default=2,
+parser.add_argument('-word_vec_size', type=int, default=100,
                     help='Word embedding sizes')
 parser.add_argument('-input_feed', type=int, default=0,
                     help="""Feed the context vector at each time step as
@@ -71,9 +73,15 @@ parser.add_argument('-estimate_temp', type=bool, default=False,
                     help='Use automatic estimation of temperature annealing for gumbel')
 
 ## D options
-parser.add_argument('-D_rnn_size', type=int, default=10,
+parser.add_argument('-D_rnn_size', type=int, default=100,
                     help='D: Size fo LSTM hidden states')
 parser.add_argument('-D_dropout', type=float, default=0.3,
+                    help='Dropout probability; applied between LSTM stacks.')
+
+## Hallucinator options
+parser.add_argument('-H_rnn_size', type=int, default=100,
+                    help='D: Size fo LSTM hidden states')
+parser.add_argument('-H_dropout', type=float, default=0.3,
                     help='Dropout probability; applied between LSTM stacks.')
 
 
@@ -168,7 +176,7 @@ def eval(G, criterion, data, dataset):
         targets = batch[1][1:]  # exclude <s> from targets
         outputs = G(batch, eval=True)
         log_pred = i % (opt.log_interval/5) == 0 and i > 0
-        _, _, loss  = memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, False, True)
+        _, _, loss  = memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, False, False, True)
 
         total_loss += loss
         total_words += targets.data.ne(onmt.Constants.PAD).sum()
@@ -178,22 +186,17 @@ def eval(G, criterion, data, dataset):
         G.set_gumbel(True)
     return total_loss / total_words
 
-def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, log_pred=False, eval=False):
+def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, H=None, log_pred=False, eval=False):
 
     loss = 0
     fake, real = None, None
 
-
     if eval:
         pred_t = F.log_softmax(outputs)
-        # print('pred_t: ' + str(pred_t))
         pred_t = pred_t.view(pred_t.size(0) / opt.batch_size, opt.batch_size, pred_t.size(1))
-        # print('pred_t: ' + str(pred_t))
         pred_t = pred_t[:targets.size(0),:,:]
         pred_t = pred_t.view(pred_t.size(0) * pred_t.size(1), pred_t.size(2))
-        # print('pred_t: ' + str(pred_t))
 
-        # print('targets: ' + str(targets))
         if log_pred:
             log_predictions(pred_t, targets, G.log['distances'], dataset['dicts']['tgt'])
         targ_t = targets.contiguous()
@@ -220,9 +223,9 @@ def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, log_pr
             log_predictions(pred_t, targets, G.log['distances'], dataset['dicts']['tgt'])
 
         noise_sources = one_hot(G, sources.data,
-                                     dataset['dicts']['src'].size())
+                                     dataset['dicts']['src'].size(), H)
         noise_targets = one_hot(G, targets.data,
-                                     dataset['dicts']['tgt'].size())
+                                     dataset['dicts']['tgt'].size(), H)
 
 
         if opt.cuda:
@@ -289,7 +292,7 @@ def log_predictions(pred_t, targ_t, distances, tgt_dict):
     logger.debug('past avg lev distance: %f, last 10 avg lev distance %f \n' % (avg_dist, avg_dist_10))
 
 
-def one_hot(G, input, num_input_symbols, temp_estim=None):
+def one_hot(G, input, num_input_symbols, H=None):
     one_hot_tensor = torch.FloatTensor(input.size()[1], input.size()[0], num_input_symbols)
     input = torch.transpose(input, 1, 0)
     for i in range(input.size()[0]):
@@ -303,19 +306,31 @@ def one_hot(G, input, num_input_symbols, temp_estim=None):
             # Use ST gumbel-softmax
             y_onehot.scatter_(1, input[i].unsqueeze(1), 1)
             one_hot_tensor[i] = y_onehot
+        elif opt.hallucinate:
+            y_onehot = y_onehot.scatter_(1, input[i].unsqueeze(1), num_input_symbols)
+            # Masking PAD: we do it before softmax, as in generation
+            one_hot_tensor[i] = y_onehot
         else:
             # Use soft gumbel-softmax
-            y_onehot.scatter_(1, input[i].unsqueeze(1), num_input_symbols)
-            pert = G.generator.sampler(Variable(y_onehot))
+            y_onehot = Variable(y_onehot.scatter_(1, input[i].unsqueeze(1), num_input_symbols))
+
+            pert = G.generator.sampler(y_onehot)
 
             # Masking PAD: we do it before softmax, as in generation
             pert.data[:, onmt.Constants.PAD] = 0
             pert = F.softmax(pert)
 
             one_hot_tensor[i] = pert.data
+    if opt.hallucinate:
+        one_hot_tensor = H(Variable(one_hot_tensor, requires_grad=True))
+        one_hot_tensor = G.generator.sampler(one_hot_tensor).data
+        one_hot_tensor = one_hot_tensor.contiguous().view(one_hot_tensor.size()[0]*one_hot_tensor.size()[1], one_hot_tensor.size()[2])
+        one_hot_tensor[:, onmt.Constants.PAD] = 0
+        return F.softmax(Variable(one_hot_tensor))
 
-    one_hot_tensor = torch.transpose(one_hot_tensor,1,0)
-    return Variable(one_hot_tensor.contiguous().view(one_hot_tensor.size()[0]*one_hot_tensor.size()[1], one_hot_tensor.size()[2]))
+    else:
+        one_hot_tensor = torch.transpose(one_hot_tensor,1,0)
+        return Variable(one_hot_tensor.contiguous().view(one_hot_tensor.size()[0]*one_hot_tensor.size()[1], one_hot_tensor.size()[2]))
 
 
 def clip_gradient(opt, model):
@@ -327,7 +342,7 @@ def clip_gradient(opt, model):
     totalnorm = math.sqrt(totalnorm)
     return min(1, opt.clip / (totalnorm + 1e-6))
 
-def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=None):
+def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=None, H=None, H_crit=None, optimizerH=None):
     logger.info(G)
     G.train()
     if not opt.supervision:
@@ -357,7 +372,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
             batchIdx = batchOrder[i] if epoch >= opt.curriculum else i
             batch = trainData[batchIdx]
-            outputs = G(batch, eval=False)
+            outputs = G(batch, H, H_crit, optimizerH, eval=False)
             sources = batch[0]
             targets = batch[1][1:]  # exclude <s> from targets
 
@@ -365,7 +380,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                 G.zero_grad()
                 log_pred = i % (opt.log_interval) == 0 and i > 0
                 _, _, loss = memoryEfficientLoss(
-                    G, outputs, sources, targets, dataset, cxt_criterion, log_pred)
+                    G, outputs, sources, targets, dataset, cxt_criterion, H, log_pred)
 
                 # update the parameters
                 grad_norm = optimizerG.step()
@@ -387,7 +402,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
             else:
                 log_pred = i % (opt.log_interval) == 0 and i > 0
                 fake, real, _= memoryEfficientLoss(
-                    G, outputs, sources, targets, dataset, None, log_pred)
+                    G, outputs, sources, targets, dataset, None, H,  log_pred)
 
                 fake = fake.contiguous().view(fake.size()[0]/opt.batch_size,opt.batch_size,fake.size()[1])
                 real = real.contiguous().view(real.size()[0]/opt.batch_size,opt.batch_size,real.size()[1])
@@ -567,13 +582,23 @@ def main():
             temp_estimator = None
             if opt.estimate_temp:
                 temp_estimator = onmt.Models.TempEstimator(opt)
+            H = None
+            H_crit= None
+            if opt.hallucinate:
+                H = onmt.Models.Hallucinator(opt, dicts['tgt'])
+                for p in H.parameters():
+                    p.data.uniform_(-opt.param_init, opt.param_init)
+                H_crit = nn.MSELoss()
+                optimizerH = optim.RMSprop(H.parameters(), lr=5e-5)
+
             generator = onmt.Models.Generator(opt, dicts['tgt'], temp_estimator)
             decoder = onmt.Models.Decoder(opt, dicts['tgt'], generator)
+
+
 
         G = onmt.Models.G(opt, encoder, decoder, generator, temp_estimator)
         # for p in G.parameters():
         #     p.data.uniform_(-opt.param_init, opt.param_init)
-
 
         optimizerG = optim.Adam(G.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
 
@@ -611,7 +636,7 @@ def main():
     if not opt.supervision:
         nParams = sum([p.nelement() for p in D.parameters()])
         logger.info('* number of D parameters: %d' % nParams)
-    trainModel(G, trainData, validData, dataset, optimizerG, D, optimizerD)
+    trainModel(G, trainData, validData, dataset, optimizerG, D, optimizerD, H, H_crit, optimizerH)
 
 
 if __name__ == "__main__":

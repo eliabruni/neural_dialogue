@@ -1,6 +1,5 @@
 import onmt.Constants
 import onmt.Models
-import onmt.Models_exp
 from onmt.Translator import Translator
 from onmt.Dataset import Dataset
 from onmt.Optim import Optim
