@@ -669,6 +669,8 @@ def main():
             if opt.wasser:
                 optimizerG = optim.RMSprop(G.parameters(), lr=5e-5)
                 optimizerD = optim.RMSprop(D.parameters(), lr=5e-5)
+                if opt.hallucinate:
+                    optimizerH = optim.RMSprop(D.parameters(), lr=5e-5)
             else:
                 optimizerD = optim.Adam(D.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
 
