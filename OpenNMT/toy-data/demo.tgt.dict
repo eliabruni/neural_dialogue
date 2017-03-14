@@ -2,9 +2,11 @@
 <unk> 1
 <s> 2
 </s> 3
-TEST_DOUBLE 4
-TEST 5
+F 4
+E 5
 D 6
 B 7
 C 8
 A 9
+TEST_DOUBLE 10
+TEST 11

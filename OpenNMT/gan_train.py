@@ -423,16 +423,19 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                 total_words += num_words
                 report_words += num_words
                 if i % opt.log_interval == 0 and i > 0:
-                    print("Epoch %2d, %5d/%5d batches; perplexity: %6.2f; %3.0f tokens/s; %6.0f s elapsed" %
+                    logger.info("Epoch %2d, %5d/%5d batches; perplexity: %6.2f; %3.0f tokens/s; %6.0f s elapsed" %
                           (epoch, i, len(trainData),
                            math.exp(report_loss / report_words),
                            report_words / (time.time() - start),
                            time.time() - start_time))
                     if opt.use_gumbel:
                         learned_temp = G.temperature
-                        print("Generated temp: %.4f " % (learned_temp))
+                        logger.info("Generated temp: %.4f " % (learned_temp))
                         # print("Real temp: %.4f, Generated temp: %.4f " % (G.generator.real_temp, learned_temp))
             else:
+
+
+
                 log_pred = i % (opt.log_interval) == 0 and i > 0
 
                 if opt.hallucinate:
@@ -455,7 +458,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         total_words += num_words
                         report_words += num_words
                         if i % opt.log_interval == 0 and i > 0:
-                            print("[HALLUCINATOR 1] Epoch %2d, %5d/%5d batches; perplexity: %6.2f; %3.0f tokens/s" %
+                            logger.debug("[HALLUCINATOR 1] Epoch %2d, %5d/%5d batches; perplexity: %6.2f; %3.0f tokens/s" %
                                   (epoch, i, len(trainData),
                                    math.exp(report_loss / report_words),
                                    report_words / (time.time() - start)))
@@ -471,10 +474,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     total_words, report_words = 0, 0
                     for _ in range(5):
                         H2.zero_grad()
-                        inverse_targets = batch[0]
-                        inverse_sources = batch[1]
-                        inverse_batch = (inverse_sources, inverse_targets)
-                        h_outputs = H2(inverse_batch)
+                        h_outputs = H2((batch[1], batch[0]))
                         inverse_targets = batch[0][:-1]
                         loss, gradOutput = H_memoryEfficientLoss(
                             h_outputs, inverse_targets, H2.generator, cxt_criterion)
@@ -485,11 +485,11 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
                         report_loss += loss
                         total_loss += loss
-                        num_words = targets.data.ne(onmt.Constants.PAD).sum()
+                        num_words = inverse_targets.data.ne(onmt.Constants.PAD).sum()
                         total_words += num_words
                         report_words += num_words
                         if i % opt.log_interval == 0 and i > 0:
-                            print("[HALLUCINATOR 2] Epoch %2d, %5d/%5d batches; perplexity: %6.2f; %3.0f tokens/s" %
+                            logger.debug("[HALLUCINATOR 2] Epoch %2d, %5d/%5d batches; perplexity: %6.2f; %3.0f tokens/s" %
                                   (epoch, i, len(trainData),
                                    math.exp(report_loss / report_words),
                                    report_words / (time.time() - start)))
@@ -497,7 +497,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         report_loss = report_words = 0
 
 
-                    h_outputs = H2(inverse_batch)
+                    h_outputs = H2((batch[1], batch[0]))
                     h_outputs = h_outputs.view(-1, h_outputs.size(2))
                     inverse_hallucination = H2.generator(h_outputs)
 

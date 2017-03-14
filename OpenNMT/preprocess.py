@@ -42,6 +42,8 @@ parser.add_argument('-tgt_vocab',
 
 parser.add_argument('-seq_length', type=int, default=25,
                     help="Maximum sequence length")
+parser.add_argument('-min_seq_length', type=int, default=3,
+                    help="Minimum sequence length")
 parser.add_argument('-shuffle',    type=int, default=1,
                     help="Shuffle data")
 parser.add_argument('-seed',       type=int, default=3435,
@@ -129,7 +131,10 @@ def makeOSdata(srcFile):
         tgt_t = map(int, tgt_t.split(' '))
         tgt_t = torch.LongTensor(tgt_t)
 
-        if len(src_t) <= opt.seq_length and len(tgt_t) <= opt.seq_length:
+        if len(src_t) <= opt.seq_length \
+                and len(src_t) >= opt.min_seq_length \
+                and len(tgt_t) <= opt.seq_length \
+                and len(tgt_t) >= opt.min_seq_length:
             src += src_t
             tgt += tgt_t
 
@@ -180,7 +185,10 @@ def makeData(srcFile, tgtFile, srcDicts, tgtDicts):
                 print('WARNING: source and target do not have the same number of sentences')
             break
 
-        if len(srcWords) <= opt.seq_length and len(tgtWords) <= opt.seq_length:
+        if len(srcWords) <= opt.seq_length \
+                and len(srcWords) >= opt.min_seq_length \
+                and len(tgtWords) <= opt.seq_length \
+                and len(tgtWords) >= opt.min_seq_length:
 
             src += [srcDicts.convertToIdx(srcWords,
                                           onmt.Constants.UNK_WORD)]
