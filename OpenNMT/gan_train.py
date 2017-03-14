@@ -472,7 +472,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     for _ in range(5):
                         H2.zero_grad()
                         inverse_targets = batch[0]
-                        inverse_sources = batch[1][1:]# exclude <s> from sources
+                        inverse_sources = batch[1]
                         inverse_batch = (inverse_sources, inverse_targets)
                         h_outputs = H2(inverse_batch)
                         inverse_targets = batch[0][:-1]
