@@ -43,9 +43,9 @@ parser.add_argument('-hallucinate', type=bool, default=False,
 ## G options
 parser.add_argument('-layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
-parser.add_argument('-rnn_size', type=int, default=2,
+parser.add_argument('-rnn_size', type=int, default=20,
                     help='Size of LSTM hidden states')
-parser.add_argument('-word_vec_size', type=int, default=2,
+parser.add_argument('-word_vec_size', type=int, default=20,
                     help='Word embedding sizes')
 parser.add_argument('-input_feed', type=int, default=0,
                     help="""Feed the context vector at each time step as
@@ -73,7 +73,7 @@ parser.add_argument('-estimate_temp', type=bool, default=False,
                     help='Use automatic estimation of temperature annealing for gumbel')
 
 ## D options
-parser.add_argument('-D_rnn_size', type=int, default=2,
+parser.add_argument('-D_rnn_size', type=int, default=20,
                     help='D: Size fo LSTM hidden states')
 parser.add_argument('-D_dropout', type=float, default=0.3,
                     help='Dropout probability; applied between LSTM stacks.')
@@ -375,7 +375,7 @@ def clip_gradient(opt, model):
     totalnorm = math.sqrt(totalnorm)
     return min(1, opt.clip / (totalnorm + 1e-6))
 
-def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=None, H=None, H2=None, H_crit=None, optimizerH=None,optimizerH2=None):
+def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=None, H1=None, H2=None, H_crit=None, optimizerH=None, optimizerH2=None):
     logger.info(G)
     G.train()
     if not opt.supervision:
@@ -405,7 +405,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
             batchIdx = batchOrder[i] if epoch >= opt.curriculum else i
             batch = trainData[batchIdx]
-            outputs = G(batch, H, H_crit, optimizerH, eval=False)
+            outputs = G(batch, H1, H_crit, optimizerH, eval=False)
             sources = batch[0]
             targets = batch[1][1:]  # exclude <s> from targets
 
@@ -413,7 +413,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                 G.zero_grad()
                 log_pred = i % (opt.log_interval) == 0 and i > 0
                 _, _, loss = memoryEfficientLoss(
-                    G, outputs, sources, targets, dataset, cxt_criterion, H, log_pred)
+                    G, outputs, sources, targets, dataset, cxt_criterion, H1, log_pred)
 
                 # update the parameters
                 grad_norm = optimizerG.step()
@@ -442,11 +442,11 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     total_loss, report_loss = 0, 0
                     total_words, report_words = 0, 0
                     for _ in range(5):
-                        H.zero_grad()
-                        h_outputs = H(batch)
+                        H1.zero_grad()
+                        h_outputs = H1(batch)
                         targets = batch[1][1:]  # exclude <s> from targets
                         loss, gradOutput = H_memoryEfficientLoss(
-                            h_outputs, targets, H.generator, cxt_criterion)
+                            h_outputs, targets, H1.generator, cxt_criterion)
                         h_outputs.backward(gradOutput)
 
                         # update the parameters
@@ -466,9 +466,9 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         report_loss = report_words = 0
 
 
-                    h_outputs = H(batch)
+                    h_outputs = H1(batch)
                     h_outputs = h_outputs.view(-1, h_outputs.size(2))
-                    hallucination = H.generator(h_outputs)
+                    hallucination = H1.generator(h_outputs)
 
                     total_loss, report_loss = 0, 0
                     total_words, report_words = 0, 0
@@ -503,7 +503,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
 
                 fake, real, _= memoryEfficientLoss(
-                    G,H,H2, outputs, sources, targets, dataset, None, hallucination, inverse_hallucination, log_pred)
+                    G,H1,H2, outputs, sources, targets, dataset, None, hallucination, inverse_hallucination, log_pred)
 
                 fake = fake.contiguous().view(fake.size()[0]/opt.batch_size,opt.batch_size,fake.size()[1])
                 real = real.contiguous().view(real.size()[0]/opt.batch_size,opt.batch_size,real.size()[1])
@@ -683,15 +683,15 @@ def main():
             temp_estimator = None
             if opt.estimate_temp:
                 temp_estimator = onmt.Models.TempEstimator(opt)
-            H = None
+            H1 = None
             H_crit= None
             if opt.hallucinate:
                 h_encoder = onmt.Hallucinator.H_Encoder(opt, dicts['src'])
                 h_decoder = onmt.Hallucinator.H_Decoder(opt, dicts['tgt'])
                 h_generator = nn.Sequential(
                     nn.Linear(opt.rnn_size, dicts['tgt'].size()))
-                H = onmt.Hallucinator.Hallucinator(opt, h_encoder, h_decoder, h_generator)
-                optimizerH = optim.Adam(H.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
+                H1 = onmt.Hallucinator.Hallucinator(opt, h_encoder, h_decoder, h_generator)
+                optimizerH1 = optim.Adam(H1.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
 
                 h_encoder = onmt.Hallucinator.H_Encoder(opt, dicts['src'])
                 h_decoder = onmt.Hallucinator.H_Decoder(opt, dicts['tgt'])
@@ -700,14 +700,20 @@ def main():
                 H2 = onmt.Hallucinator.Hallucinator(opt, h_encoder, h_decoder, h_generator)
                 optimizerH2 = optim.Adam(H2.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
 
+                for p in H1.parameters():
+                    p.data.uniform_(-opt.param_init, opt.param_init)
+
+                for p in H2.parameters():
+                    p.data.uniform_(-opt.param_init, opt.param_init)
+
             generator = onmt.Models.Generator(opt, dicts['tgt'], temp_estimator)
             decoder = onmt.Models.Decoder(opt, dicts['tgt'], generator)
 
 
 
         G = onmt.Models.G(opt, encoder, decoder, generator, temp_estimator)
-        # for p in G.parameters():
-        #     p.data.uniform_(-opt.param_init, opt.param_init)
+        for p in G.parameters():
+            p.data.uniform_(-opt.param_init, opt.param_init)
 
         optimizerG = optim.Adam(G.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
 
@@ -715,12 +721,16 @@ def main():
         optimizerD = None
         if not opt.supervision:
             D = onmt.Models.D(opt, dicts['tgt'])
-            # for p in D.parameters():
-            #     p.data.uniform_(-opt.param_init, opt.param_init)
+
+            for p in D.parameters():
+                p.data.uniform_(-opt.param_init, opt.param_init)
+
             if opt.wasser:
                 optimizerG = optim.RMSprop(G.parameters(), lr=5e-5)
                 optimizerD = optim.RMSprop(D.parameters(), lr=5e-5)
 
+                optimizerH1 = optim.RMSprop(H1.parameters(), lr=5e-4)
+                optimizerH2 = optim.RMSprop(H2.parameters(), lr=5e-4)
             else:
                 optimizerD = optim.Adam(D.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
 
@@ -737,14 +747,14 @@ def main():
         if not opt.supervision:
             D.cuda()
             if opt.hallucinate:
-                H.cuda()
+                H1.cuda()
                 H2.cuda()
     else:
         G.cpu()
         if not opt.supervision:
             D.cpu()
             if opt.hallucinate:
-                H.cpu()
+                H1.cpu()
                 H2.cpu()
 
     nParams = sum([p.nelement() for p in G.parameters()])
@@ -752,7 +762,7 @@ def main():
     if not opt.supervision:
         nParams = sum([p.nelement() for p in D.parameters()])
         logger.info('* number of D parameters: %d' % nParams)
-    trainModel(G, trainData, validData, dataset, optimizerG, D, optimizerD, H, H2, H_crit, optimizerH, optimizerH2)
+    trainModel(G, trainData, validData, dataset, optimizerG, D, optimizerD, H1, H2, H_crit, optimizerH1, optimizerH2)
 
 
 if __name__ == "__main__":
