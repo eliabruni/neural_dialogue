@@ -43,9 +43,9 @@ parser.add_argument('-hallucinate', type=bool, default=False,
 ## G options
 parser.add_argument('-layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
-parser.add_argument('-rnn_size', type=int, default=5,
+parser.add_argument('-rnn_size', type=int, default=2,
                     help='Size of LSTM hidden states')
-parser.add_argument('-word_vec_size', type=int, default=5,
+parser.add_argument('-word_vec_size', type=int, default=2,
                     help='Word embedding sizes')
 parser.add_argument('-input_feed', type=int, default=0,
                     help="""Feed the context vector at each time step as
@@ -73,7 +73,7 @@ parser.add_argument('-estimate_temp', type=bool, default=False,
                     help='Use automatic estimation of temperature annealing for gumbel')
 
 ## D options
-parser.add_argument('-D_rnn_size', type=int, default=100,
+parser.add_argument('-D_rnn_size', type=int, default=2,
                     help='D: Size fo LSTM hidden states')
 parser.add_argument('-D_dropout', type=float, default=0.3,
                     help='Dropout probability; applied between LSTM stacks.')
@@ -436,6 +436,8 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                 log_pred = i % (opt.log_interval) == 0 and i > 0
 
                 if opt.hallucinate:
+                    total_loss, report_loss = 0, 0
+                    total_words, report_words = 0, 0
                     for _ in range(5):
                         H.zero_grad()
                         h_outputs = H(batch)
@@ -465,13 +467,15 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     h_outputs = h_outputs.view(-1, h_outputs.size(2))
                     hallucination = H.generator(h_outputs)
 
-
+                    total_loss, report_loss = 0, 0
+                    total_words, report_words = 0, 0
                     for _ in range(5):
                         H2.zero_grad()
                         inverse_targets = batch[0]
                         inverse_sources = batch[1][1:]# exclude <s> from sources
-                        inverse_batch = (inverse_targets,inverse_sources)
+                        inverse_batch = (inverse_sources, inverse_targets)
                         h_outputs = H2(inverse_batch)
+                        inverse_targets = batch[0][:-1]
                         loss, gradOutput = H_memoryEfficientLoss(
                             h_outputs, inverse_targets, H2.generator, cxt_criterion)
                         h_outputs.backward(gradOutput)
