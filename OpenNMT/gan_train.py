@@ -250,7 +250,7 @@ def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, halluc
         if opt.hallucinate:
             pert = G.generator.sampler(hallucination)
             # Masking PAD: we do it before softmax, as in generation
-            # pert.data[:, onmt.Constants.PAD] = 0
+            pert.data[:, onmt.Constants.PAD] = 0
             noise_targets = F.softmax(pert)
 
         else:
@@ -342,7 +342,7 @@ def one_hot(G, input, num_input_symbols):
             pert = G.generator.sampler(y_onehot)
 
             # Masking PAD: we do it before softmax, as in generation
-            # pert.data[:, onmt.Constants.PAD] = 0
+            pert.data[:, onmt.Constants.PAD] = 0
             pert = F.softmax(pert)
 
             one_hot_tensor[i] = pert.data
