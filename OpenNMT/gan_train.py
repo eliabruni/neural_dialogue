@@ -43,9 +43,9 @@ parser.add_argument('-hallucinate', type=bool, default=False,
 ## G options
 parser.add_argument('-layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
-parser.add_argument('-rnn_size', type=int, default=100,
+parser.add_argument('-rnn_size', type=int, default=5,
                     help='Size of LSTM hidden states')
-parser.add_argument('-word_vec_size', type=int, default=100,
+parser.add_argument('-word_vec_size', type=int, default=5,
                     help='Word embedding sizes')
 parser.add_argument('-input_feed', type=int, default=0,
                     help="""Feed the context vector at each time step as
@@ -79,7 +79,7 @@ parser.add_argument('-D_dropout', type=float, default=0.3,
                     help='Dropout probability; applied between LSTM stacks.')
 
 ## Hallucinator options
-parser.add_argument('-H_rnn_size', type=int, default=100,
+parser.add_argument('-H_rnn_size', type=int, default=5,
                     help='D: Size fo LSTM hidden states')
 parser.add_argument('-H_dropout', type=float, default=0.3,
                     help='Dropout probability; applied between LSTM stacks.')
@@ -207,7 +207,7 @@ def H_memoryEfficientLoss(outputs, targets, generator, crit, eval=False):
     grad_output = None if outputs.grad is None else outputs.grad.data
     return loss, grad_output
 
-def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, hallucination=None, log_pred=False, eval=False):
+def memoryEfficientLoss(G,H1,H2, outputs, sources, targets, dataset, criterion, hallucination=None,inverse_hallucination=None, log_pred=False, eval=False):
 
     loss = 0
     fake, real = None, None
@@ -244,18 +244,23 @@ def memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, halluc
         if log_pred:
             log_predictions(pred_t, targets, G.log['distances'], dataset['dicts']['tgt'])
 
-        noise_sources = one_hot(G, sources.data,
-                                dataset['dicts']['src'].size())
-
         if opt.hallucinate:
-            pert = G.generator.sampler(hallucination)
+            pert1 = G.generator.sampler(hallucination)
             # Masking PAD: we do it before softmax, as in generation
-            pert.data[:, onmt.Constants.PAD] = 0
-            noise_targets = F.softmax(pert)
+            pert1.data[:, onmt.Constants.PAD] = 0
+            noise_targets = F.softmax(pert1)
+
+            pert2 = G.generator.sampler(inverse_hallucination)
+            # Masking PAD: we do it before softmax, as in generation
+            pert2.data[:, onmt.Constants.PAD] = 0
+            noise_sources = F.softmax(pert2)
+
 
         else:
             noise_targets = one_hot(G, targets.data,
                                          dataset['dicts']['tgt'].size())
+            noise_sources = one_hot(G, sources.data,
+                                    dataset['dicts']['src'].size())
 
         if opt.cuda:
             noise_sources = noise_sources.cuda()
@@ -370,7 +375,7 @@ def clip_gradient(opt, model):
     totalnorm = math.sqrt(totalnorm)
     return min(1, opt.clip / (totalnorm + 1e-6))
 
-def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=None, H=None, H_crit=None, optimizerH=None):
+def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=None, H=None, H2=None, H_crit=None, optimizerH=None,optimizerH2=None):
     logger.info(G)
     G.train()
     if not opt.supervision:
@@ -438,6 +443,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         loss, gradOutput = H_memoryEfficientLoss(
                             h_outputs, targets, H.generator, cxt_criterion)
                         h_outputs.backward(gradOutput)
+
                         # update the parameters
                         grad_norm = optimizerH.step()
 
@@ -447,7 +453,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         total_words += num_words
                         report_words += num_words
                         if i % opt.log_interval == 0 and i > 0:
-                            print("[HALLUCINATOR] Epoch %2d, %5d/%5d batches; perplexity: %6.2f; %3.0f tokens/s" %
+                            print("[HALLUCINATOR 1] Epoch %2d, %5d/%5d batches; perplexity: %6.2f; %3.0f tokens/s" %
                                   (epoch, i, len(trainData),
                                    math.exp(report_loss / report_words),
                                    report_words / (time.time() - start)))
@@ -460,8 +466,40 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     hallucination = H.generator(h_outputs)
 
 
+                    for _ in range(5):
+                        H2.zero_grad()
+                        inverse_targets = batch[0]
+                        inverse_sources = batch[1][1:]# exclude <s> from sources
+                        inverse_batch = (inverse_targets,inverse_sources)
+                        h_outputs = H2(inverse_batch)
+                        loss, gradOutput = H_memoryEfficientLoss(
+                            h_outputs, inverse_targets, H2.generator, cxt_criterion)
+                        h_outputs.backward(gradOutput)
+
+                        # update the parameters
+                        grad_norm = optimizerH2.step()
+
+                        report_loss += loss
+                        total_loss += loss
+                        num_words = targets.data.ne(onmt.Constants.PAD).sum()
+                        total_words += num_words
+                        report_words += num_words
+                        if i % opt.log_interval == 0 and i > 0:
+                            print("[HALLUCINATOR 2] Epoch %2d, %5d/%5d batches; perplexity: %6.2f; %3.0f tokens/s" %
+                                  (epoch, i, len(trainData),
+                                   math.exp(report_loss / report_words),
+                                   report_words / (time.time() - start)))
+
+                        report_loss = report_words = 0
+
+
+                    h_outputs = H2(inverse_batch)
+                    h_outputs = h_outputs.view(-1, h_outputs.size(2))
+                    inverse_hallucination = H2.generator(h_outputs)
+
+
                 fake, real, _= memoryEfficientLoss(
-                    G, outputs, sources, targets, dataset, None, hallucination,  log_pred)
+                    G,H,H2, outputs, sources, targets, dataset, None, hallucination, inverse_hallucination, log_pred)
 
                 fake = fake.contiguous().view(fake.size()[0]/opt.batch_size,opt.batch_size,fake.size()[1])
                 real = real.contiguous().view(real.size()[0]/opt.batch_size,opt.batch_size,real.size()[1])
@@ -474,7 +512,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     D.zero_grad()
 
                     # train with real
-                    D_real = D(real)
+                    D_real = D(real.detach())
                     D_x = D_real.data.mean()
 
                     # train with fake
@@ -648,8 +686,15 @@ def main():
                 h_decoder = onmt.Hallucinator.H_Decoder(opt, dicts['tgt'])
                 h_generator = nn.Sequential(
                     nn.Linear(opt.rnn_size, dicts['tgt'].size()))
-                H = onmt.Hallucinator.Hallucinator(h_encoder, h_decoder, h_generator)
+                H = onmt.Hallucinator.Hallucinator(opt, h_encoder, h_decoder, h_generator)
                 optimizerH = optim.Adam(H.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
+
+                h_encoder = onmt.Hallucinator.H_Encoder(opt, dicts['src'])
+                h_decoder = onmt.Hallucinator.H_Decoder(opt, dicts['tgt'])
+                h_generator = nn.Sequential(
+                    nn.Linear(opt.rnn_size, dicts['tgt'].size()))
+                H2 = onmt.Hallucinator.Hallucinator(opt, h_encoder, h_decoder, h_generator)
+                optimizerH2 = optim.Adam(H2.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
 
             generator = onmt.Models.Generator(opt, dicts['tgt'], temp_estimator)
             decoder = onmt.Models.Decoder(opt, dicts['tgt'], generator)
@@ -689,19 +734,21 @@ def main():
             D.cuda()
             if opt.hallucinate:
                 H.cuda()
+                H2.cuda()
     else:
         G.cpu()
         if not opt.supervision:
             D.cpu()
             if opt.hallucinate:
                 H.cpu()
+                H2.cpu()
 
     nParams = sum([p.nelement() for p in G.parameters()])
     logger.info('* number of G parameters: %d' % nParams)
     if not opt.supervision:
         nParams = sum([p.nelement() for p in D.parameters()])
         logger.info('* number of D parameters: %d' % nParams)
-    trainModel(G, trainData, validData, dataset, optimizerG, D, optimizerD, H, H_crit, optimizerH)
+    trainModel(G, trainData, validData, dataset, optimizerG, D, optimizerD, H, H2, H_crit, optimizerH, optimizerH2)
 
 
 if __name__ == "__main__":

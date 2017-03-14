@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 import onmt.modules
+import numpy as np
 
 class H_Encoder(nn.Module):
 
@@ -127,12 +128,21 @@ class H_Decoder(nn.Module):
 
 class Hallucinator(nn.Module):
 
-    def __init__(self, encoder, decoder, generator):
+    def __init__(self, opt, encoder, decoder, generator):
         super(Hallucinator, self).__init__()
+        self.opt = opt
         self.encoder = encoder
         self.decoder = decoder
         self.generator = generator
         self.generate = False
+        self.tau0 = 1  # initial temperature
+        self.eps = 1e-20
+        self.temperature = self.tau0
+        self.ANNEAL_RATE = 0.00003
+        self.MIN_TEMP = 0.5
+        self.iter_cnt = 0
+
+
 
     def set_generate(self, enabled):
         self.generate = enabled
@@ -151,6 +161,34 @@ class Hallucinator(nn.Module):
                     .view(h.size(0) // 2, h.size(1), h.size(2) * 2)
         else:
             return h
+
+    def anneal_tau_temp(self):
+        # Anneal temperature tau
+        self.temperature = np.maximum(self.tau0 * np.exp(-self.ANNEAL_RATE * self.iter_cnt * self.opt.batch_size), self.MIN_TEMP)
+
+    def get_noise(self, input):
+        noise = torch.rand(input.size())
+        if self.opt.cuda:
+            noise = noise.cuda()
+        noise.add_(self.eps).log_().neg_()
+        noise.add_(self.eps).log_().neg_()
+        noise = Variable(noise)
+        return noise
+
+    def sampler(self, input):
+        noise = self.get_noise(input)
+        x = (input + noise) / self.temperature
+        if self.opt.ST:
+            # Use ST gumbel-softmax
+            y_onehot = torch.FloatTensor(x.size())
+            if self.opt.cuda:
+                y_onehot = y_onehot.cuda()
+            y_onehot.zero_()
+            max, idx = torch.max(x, 1)
+            y_onehot.scatter_(1, idx.data, 1)
+            return Variable(y_onehot).detach()
+        else:
+            return x.view_as(input)
 
     def forward(self, input):
         src = input[0]
