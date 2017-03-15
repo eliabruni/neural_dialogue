@@ -352,16 +352,6 @@ def one_hot(G, input, num_input_symbols):
 
             one_hot_tensor[i] = pert.data
 
-
-
-
-            # Use soft gumbel-softmax
-            # y_onehot.scatter_(1, input[i].unsqueeze(1), num_input_symbols)
-            # pert = G.generator.sampler(Variable(y_onehot))
-            # pert.data[:, onmt.Constants.PAD] = 0
-            # pert = F.softmax(pert)
-            # one_hot_tensor[i] = pert.data
-
     one_hot_tensor = torch.transpose(one_hot_tensor,1,0)
     return Variable(one_hot_tensor.contiguous().view(one_hot_tensor.size()[0]*one_hot_tensor.size()[1], one_hot_tensor.size()[2]))
 
