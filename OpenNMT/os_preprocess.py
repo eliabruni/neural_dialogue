@@ -84,8 +84,6 @@ def makeOSdata(srcFile):
     while True:
         lines = srcF.readline().split('|')
 
-        print('lines: ' + str(lines))
-        print('len(lines): ' + str(len(lines)))
         if len(lines) == 3:
 
             src_t = lines[0] + ' '  + str(onmt.Constants.IEOS) + ' ' +  lines[1]
