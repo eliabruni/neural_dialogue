@@ -45,48 +45,10 @@ parser.add_argument('-shuffle',    type=int, default=1,
 parser.add_argument('-seed',       type=int, default=3435,
                     help="Random seed")
 
-parser.add_argument('-report_every', type=int, default=100000,
+parser.add_argument('-report_every', type=int, default=1000000,
                     help="Report status every this many sentences")
 
 opt = parser.parse_args()
-
-
-def makeVocabulary(filename, size):
-    vocab = onmt.Dict([onmt.Constants.PAD_WORD, onmt.Constants.UNK_WORD,
-                       onmt.Constants.BOS_WORD, onmt.Constants.EOS_WORD])
-
-    with open(filename) as f:
-        for sent in f.readlines():
-            for word in sent.split():
-                vocab.add(word)
-
-    originalSize = vocab.size()
-    vocab = vocab.prune(size)
-    print('Created dictionary of size %d (pruned from %d)' %
-          (vocab.size(), originalSize))
-
-    return vocab
-
-
-def initVocabulary(name, dataFile, vocabFile, vocabSize):
-
-    vocab = None
-    if vocabFile is not None:
-        # If given, load existing word dictionary.
-        print('Reading ' + name + ' vocabulary from \'' + vocabFile + '\'...')
-        vocab = onmt.Dict()
-        vocab.loadFile(vocabFile)
-        print('Loaded ' + vocab.size() + ' ' + name + ' words')
-
-    if vocab is None:
-        # If a dictionary is still missing, generate it.
-        print('Building ' + name + ' vocabulary...')
-        genWordVocab = makeVocabulary(dataFile, vocabSize)
-
-        vocab = genWordVocab
-
-    print()
-    return vocab
 
 
 def saveVocabulary(name, vocab, file):
@@ -151,66 +113,6 @@ def makeOSdata(srcFile):
                 print('... %d sentences prepared' % count)
 
     srcF.close()
-
-    if opt.shuffle == 1:
-        print('... shuffling sentences')
-        perm = torch.randperm(len(src))
-        src = [src[idx] for idx in perm]
-        tgt = [tgt[idx] for idx in perm]
-        sizes = [sizes[idx] for idx in perm]
-
-    print('... sorting sentences by size')
-    _, perm = torch.sort(torch.Tensor(sizes))
-    src = [src[idx] for idx in perm]
-    tgt = [tgt[idx] for idx in perm]
-
-    print('Prepared %d sentences (%d ignored due to length == 0 or > %d)' %
-          (len(src), ignored, opt.seq_length))
-
-    return src, tgt
-
-
-def makeData(srcFile, tgtFile, srcDicts, tgtDicts):
-    src, tgt = [], []
-    sizes = []
-    count, ignored = 0, 0
-
-    print('Processing %s & %s ...' % (srcFile, tgtFile))
-    srcF = open(srcFile)
-    tgtF = open(tgtFile)
-
-    while True:
-        srcWords = srcF.readline().split()
-        tgtWords = tgtF.readline().split()
-
-        if not srcWords or not tgtWords:
-            if srcWords and not tgtWords or not srcWords and tgtWords:
-                print('WARNING: source and target do not have the same number of sentences')
-            break
-
-        if len(srcWords) <= opt.seq_length \
-                and len(srcWords) >= opt.min_seq_length \
-                and len(tgtWords) <= opt.seq_length \
-                and len(tgtWords) >= opt.min_seq_length:
-
-            src += [srcDicts.convertToIdx(srcWords,
-                                          onmt.Constants.UNK_WORD)]
-            tgt += [tgtDicts.convertToIdx(tgtWords,
-                                          onmt.Constants.UNK_WORD,
-                                          onmt.Constants.BOS_WORD,
-                                          onmt.Constants.EOS_WORD)]
-
-            sizes += [len(srcWords)]
-        else:
-            ignored += 1
-
-        count += 1
-
-        if count % opt.report_every == 0:
-            print('... %d sentences prepared' % count)
-
-    srcF.close()
-    tgtF.close()
 
     if opt.shuffle == 1:
         print('... shuffling sentences')
