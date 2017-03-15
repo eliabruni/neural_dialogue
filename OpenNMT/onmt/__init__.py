@@ -1,4 +1,5 @@
 import onmt.Constants
+import onmt.OS_Constants
 import onmt.Models
 import onmt.Hallucinator
 from onmt.Translator import Translator
