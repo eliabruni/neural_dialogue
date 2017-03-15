@@ -122,6 +122,8 @@ def makeOSdata(srcFile):
     while True:
         lines = srcF.readline().split('|')
 
+        print('lines: ' + str(lines))
+        print('len(lines): ' + str(len(lines)))
         if len(lines) == 3:
 
             src_t = lines[0] + ' '  + str(onmt.Constants.IEOS) + ' ' +  lines[1]
@@ -143,10 +145,10 @@ def makeOSdata(srcFile):
             else:
                 ignored += 1
 
-        count += 1
+            count += 1
 
-        if count % opt.report_every == 0:
-            print('... %d sentences prepared' % count)
+            if count % opt.report_every == 0:
+                print('... %d sentences prepared' % count)
 
     srcF.close()
 
