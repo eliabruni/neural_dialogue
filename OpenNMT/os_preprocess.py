@@ -101,7 +101,7 @@ def initOSvocabulary(name, vocabFile):
         print('Reading ' + name + ' vocabulary from \'' + vocabFile + '\'...')
         vocab = onmt.Dict()
         vocab.loadFile(vocabFile)
-        print('Loaded ' + vocab.size() + ' ' + name + ' words')
+        print('Loaded ' + str(vocab.size()) + ' ' + name + ' words')
     else:
         print('Error: vocab file required.')
 

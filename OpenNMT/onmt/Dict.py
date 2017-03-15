@@ -23,17 +23,12 @@ class Dict(object):
     def loadFile(self, filename):
         for line in open(filename):
             fields = line.split()
-
             if len(fields) == 2:
                 label = fields[0]
                 idx = int(fields[1])
-                print('label: ' + str(label))
-                print('idx: ' + str(idx))
             else:
                 label = ' '
                 idx = fields[0]
-                print('label: ' + str(label))
-                print('idx: ' + str(idx))
             self.add(label, idx)
 
     # Write entries to a file.
