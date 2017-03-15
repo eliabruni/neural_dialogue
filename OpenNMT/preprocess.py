@@ -11,6 +11,8 @@ parser = argparse.ArgumentParser(description='preprocess.lua')
 ##
 
 parser.add_argument('-config',    help="Read options from this file")
+parser.add_argument('-os_data', type=bool, default=False,
+                    help='Whether to use opensubtitles dataset')
 
 parser.add_argument('-universal_file', required=True,
                     help="Path to the training source data")
@@ -229,35 +231,46 @@ def makeData(srcFile, tgtFile, srcDicts, tgtDicts):
 
 def main():
 
-    dicts = {}
-    dicts['src'] = initVocabulary('source', opt.universal_file, opt.universal_vocab,
-                                  opt.universal_vocab_size)
+    if opt.os_data:
+        dicts = {}
+        dicts['src'] = initOSvocabulary('source', opt.universal_vocab)
+        dicts['tgt'] = dicts['src']
 
-    dicts['tgt'] = dicts['src']
-    # dicts['tgt'] = initVocabulary('target', opt.train_tgt, opt.tgt_vocab,
-    #                               opt.tgt_vocab_size)
-
-    print('Preparing training ...')
-    train = {}
-    train['src'], train['tgt'] = makeData(opt.train_src, opt.train_tgt,
-                                          dicts['src'], dicts['tgt'])
-
-    print('Preparing validation ...')
-    valid = {}
-    valid['src'], valid['tgt'] = makeData(opt.valid_src, opt.valid_tgt,
-                                    dicts['src'], dicts['tgt'])
-
-    if opt.src_vocab is None:
-        saveVocabulary('source', dicts['src'], opt.save_data + '.src.dict')
-    if opt.tgt_vocab is None:
-        saveVocabulary('target', dicts['tgt'], opt.save_data + '.tgt.dict')
+        print('Preparing training ...')
+        train = {}
+        train['src'], train['tgt'] = makeOSdata(opt.train_src)
 
 
-    print('Saving data to \'' + opt.save_data + '-train.pt\'...')
-    save_data = {'dicts': dicts,
-                 'train': train,
-                 'valid': valid}
-    torch.save(save_data, opt.save_data + '-train.pt')
+    else:
+        dicts = {}
+        dicts['src'] = initVocabulary('source', opt.universal_file, opt.universal_vocab,
+                                      opt.universal_vocab_size)
+
+        dicts['tgt'] = dicts['src']
+        # dicts['tgt'] = initVocabulary('target', opt.train_tgt, opt.tgt_vocab,
+        #                               opt.tgt_vocab_size)
+
+        print('Preparing training ...')
+        train = {}
+        train['src'], train['tgt'] = makeData(opt.train_src, opt.train_tgt,
+                                              dicts['src'], dicts['tgt'])
+
+        print('Preparing validation ...')
+        valid = {}
+        valid['src'], valid['tgt'] = makeData(opt.valid_src, opt.valid_tgt,
+                                        dicts['src'], dicts['tgt'])
+
+        if opt.src_vocab is None:
+            saveVocabulary('source', dicts['src'], opt.save_data + '.src.dict')
+        if opt.tgt_vocab is None:
+            saveVocabulary('target', dicts['tgt'], opt.save_data + '.tgt.dict')
+
+
+        print('Saving data to \'' + opt.save_data + '-train.pt\'...')
+        save_data = {'dicts': dicts,
+                     'train': train,
+                     'valid': valid}
+        torch.save(save_data, opt.save_data + '-train.pt')
 
 
 if __name__ == "__main__":
