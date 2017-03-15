@@ -240,6 +240,22 @@ def main():
         train = {}
         train['src'], train['tgt'] = makeOSdata(opt.train_src)
 
+        print('Preparing validation ...')
+        valid = {}
+        valid['src'], valid['tgt'] = makeOSdata(opt.valid_src)
+
+        if opt.src_vocab is None:
+            saveVocabulary('source', dicts['src'], opt.save_data + '.src.dict')
+        if opt.tgt_vocab is None:
+            saveVocabulary('target', dicts['tgt'], opt.save_data + '.tgt.dict')
+
+
+        print('Saving data to \'' + opt.save_data + '-train.pt\'...')
+        save_data = {'dicts': dicts,
+                     'train': train,
+                     'valid': valid}
+        torch.save(save_data, opt.save_data + '-train.pt')
+
 
     else:
         dicts = {}
