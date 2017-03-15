@@ -122,7 +122,7 @@ def makeOSdata(srcFile):
     while True:
         lines = srcF.readline().split('|')
 
-        src_t = lines[0] + ' '  + onmt.Constants.IEOS + ' ' +  lines[1]
+        src_t = lines[0] + ' '  + str(onmt.Constants.IEOS) + ' ' +  lines[1]
         src_t = map(int, src_t.split(' '))
         src_t = torch.LongTensor(src_t)
 
