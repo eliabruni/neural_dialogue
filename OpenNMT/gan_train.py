@@ -41,6 +41,12 @@ parser.add_argument('-hallucinate', type=bool, default=False,
                     help='Whether to use supervision')
 parser.add_argument('-perturbe_real', type=bool, default=False,
                     help='Whether to use use gumbel for real data')
+parser.add_argument('-disc_overfeat', type=int, default=0,
+                    help='Overfeat the discriminator on the generated batch')
+parser.add_argument('-g_train_interval', type=int, default=5,
+                    help='After how many discriminator train iters to train the generator')
+
+
 
 ## G options
 parser.add_argument('-layers', type=int, default=2,
@@ -528,7 +534,6 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                 fake = fake.contiguous().view(fake.size()[0]/opt.batch_size,opt.batch_size,fake.size()[1])
                 real = real.contiguous().view(real.size()[0]/opt.batch_size,opt.batch_size,real.size()[1])
 
-                G_train_interval = 5
                 if opt.wasser:
                     ############################
                     # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
@@ -555,7 +560,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     for p in D.parameters():
                         p.data.clamp_(-0.01, 0.01)
 
-                    if i % G_train_interval == 0:
+                    if i % opt.g_train_interval == 0:
 
                         # if i % G_train_interval == 0:
                         ############################
@@ -563,7 +568,16 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         ###########################
                         G.zero_grad()
 
+                        if opt.disc_overfeat > 0:
+                            for j in range(opt.overfeat_k):
+                                D_real = D(real.detach())
+                                D_fake = D(fake.detach())
+                                errD = -(torch.mean(D_real) - torch.mean(D_fake))
+                                errD.backward()
+
                         D_fake = D(fake)
+
+
                         errG = -torch.mean(D_fake)
 
                         errG.backward()
