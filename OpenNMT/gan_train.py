@@ -462,7 +462,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         report_words += num_words
 
                         if i % opt.log_interval == 0 and i > 0 and j == 4:
-                            logger.debug("[HALLUCINATOR 1] Epoch %2d, %5d/%5d batches; perplexity: %6.2f; %3.0f tokens/s\n'" %
+                            logger.debug("Epoch %2d, %5d/%5d batches; perplexity: %6.2f; %3.0f tokens/s\n'" %
                                   (epoch, i, len(trainData),
                                    math.exp(report_loss / report_words),
                                    report_words / (time.time() - start)))
@@ -476,9 +476,16 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     total_words, report_words = 0, 0
                     for j in range(5):
                         H2.zero_grad()
-                        h_outputs = H2((batch[1], batch[0]))
-                        inverse_sources = batch[1][1:]
-                        inverse_targets = batch[0][1:]
+                        inverse_sources = batch[1][1:-1]
+                        inverse_targets = batch[0]
+                        bos = torch.LongTensor(1, inverse_targets.size(1)).fill_(onmt.Constants.BOS)
+                        eos = torch.LongTensor(1, inverse_targets.size(1)).fill_(onmt.Constants.EOS)
+                        if opt.cuda:
+                            eos = eos.cuda()
+                        inverse_targets = Variable(torch.cat([bos,inverse_targets.data],0))
+                        inverse_targets = Variable(torch.cat([inverse_targets.data,eos],0))
+                        h_outputs = H2((inverse_sources, inverse_targets))
+                        inverse_targets = inverse_targets[1:]
                         if log_pred and j == 4:
                             logger.debug("[HALLUCINATOR 2] SAMPLES: ")
                         loss, gradOutput = H_memoryEfficientLoss(
@@ -494,7 +501,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         total_words += num_words
                         report_words += num_words
                         if i % opt.log_interval == 0 and i > 0 and j == 4:
-                            logger.debug("[HALLUCINATOR 2] Epoch %2d, %5d/%5d batches; perplexity: %6.2f; %3.0f tokens/s\n'" %
+                            logger.debug("Epoch %2d, %5d/%5d batches; perplexity: %6.2f; %3.0f tokens/s\n\n'" %
                                   (epoch, i, len(trainData),
                                    math.exp(report_loss / report_words),
                                    report_words / (time.time() - start)))
@@ -502,7 +509,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         report_loss = report_words = 0
 
 
-                    h_outputs = H2((batch[1], batch[0]))
+                    h_outputs = H2((inverse_sources, inverse_targets))
                     h_outputs = h_outputs.view(-1, h_outputs.size(2))
                     inverse_hallucination = H2.generator(h_outputs)
 
