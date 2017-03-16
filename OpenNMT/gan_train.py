@@ -200,7 +200,6 @@ def H_memoryEfficientLoss(H , dataset, outputs, targets, generator, crit, log_pr
         out_t = generator(out_t)
         pred_t = F.log_softmax(out_t)
         if log_pred:
-            logger.debug('HALLUCINATOR')
             log_predictions(pred_t, targets, H.log['distances'], dataset['dicts']['tgt'])
         loss_t = crit(pred_t, targ_t.view(-1))
         loss += loss_t.data[0]
@@ -438,6 +437,8 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         H1.zero_grad()
                         h_outputs = H1(batch)
                         targets = batch[1][1:]  # exclude <s> from targets
+                        if log_pred:
+                            logger.debug("[HALLUCINATOR 1] SAMPLES: ")
                         loss, gradOutput = H_memoryEfficientLoss(
                             H1, dataset,h_outputs, targets, H1.generator, cxt_criterion, log_pred)
                         h_outputs.backward(gradOutput)
@@ -450,14 +451,13 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         num_words = targets.data.ne(onmt.Constants.PAD).sum()
                         total_words += num_words
                         report_words += num_words
+
                         if i % opt.log_interval == 0 and i > 0:
                             logger.debug("[HALLUCINATOR 1] Epoch %2d, %5d/%5d batches; perplexity: %6.2f; %3.0f tokens/s" %
                                   (epoch, i, len(trainData),
                                    math.exp(report_loss / report_words),
                                    report_words / (time.time() - start)))
-
                         report_loss = report_words = 0
-
 
                     h_outputs = H1(batch)
                     h_outputs = h_outputs.view(-1, h_outputs.size(2))
@@ -469,6 +469,8 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         H2.zero_grad()
                         h_outputs = H2((batch[1], batch[0]))
                         inverse_targets = batch[0][:-1]
+                        if log_pred:
+                            logger.debug("[HALLUCINATOR 2] SAMPLES: ")
                         loss, gradOutput = H_memoryEfficientLoss(
                             H2, dataset,h_outputs, inverse_targets, H2.generator, cxt_criterion, log_pred)
                         h_outputs.backward(gradOutput)
