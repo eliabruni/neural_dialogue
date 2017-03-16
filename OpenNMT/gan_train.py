@@ -39,6 +39,8 @@ parser.add_argument('-st_conditioning', type=bool, default=False,
                     help='Use st for conditioning generation')
 parser.add_argument('-hallucinate', type=bool, default=False,
                     help='Whether to use supervision')
+parser.add_argument('-perturbe_real', type=bool, default=False,
+                    help='Whether to use use gumbel for real data')
 
 ## G options
 parser.add_argument('-layers', type=int, default=2,
@@ -247,12 +249,14 @@ def memoryEfficientLoss(G,H1,H2, outputs, sources, targets, dataset, criterion, 
             log_predictions(pred_t, sources, targets, G.log['distances'], dataset['dicts']['tgt'])
 
         if opt.hallucinate:
-            pert1 = G.generator.sampler(hallucination)
+            if opt.perturbe_real:
+                pert1 = G.generator.sampler(hallucination)
             # Masking PAD: we do it before softmax, as in generation
             pert1.data[:, onmt.Constants.PAD] = 0
             noise_targets = F.softmax(pert1)
 
-            pert2 = G.generator.sampler(inverse_hallucination)
+            if opt.perturbe_real:
+                pert2 = G.generator.sampler(inverse_hallucination)
             # Masking PAD: we do it before softmax, as in generation
             pert2.data[:, onmt.Constants.PAD] = 0
             noise_sources = F.softmax(pert2)
@@ -502,7 +506,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         total_words += num_words
                         report_words += num_words
                         if i % opt.log_interval == 0 and i > 0 and j == 4:
-                            logger.debug("Epoch %2d, %5d/%5d batches; perplexity: %6.2f; %3.0f tokens/s\n\n'" %
+                            logger.debug("Epoch %2d, %5d/%5d batches; perplexity: %6.2f; %3.0f tokens/s\n'" %
                                   (epoch, i, len(trainData),
                                    math.exp(report_loss / report_words),
                                    report_words / (time.time() - start)))
@@ -522,7 +526,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                 fake = fake.contiguous().view(fake.size()[0]/opt.batch_size,opt.batch_size,fake.size()[1])
                 real = real.contiguous().view(real.size()[0]/opt.batch_size,opt.batch_size,real.size()[1])
 
-                G_train_interval = 50
+                G_train_interval = 5
                 if opt.wasser:
                     ############################
                     # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
@@ -628,7 +632,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     G.anneal_tau_temp()
 
                 if i % opt.log_interval == 0 and i > 0:
-                    logger.info('[%d/%d][%d/%d] Temp: %.4f Loss_D: %.4f Loss_G: %.4f D(x): %.4f D(G(z)): %.4f / %.4f\n'
+                    logger.info('[%d/%d][%d/%d] Temp: %.4f Loss_D: %.4f Loss_G: %.4f D(x): %.4f D(G(z)): %.4f / %.4f\n\n'
                           % (epoch, opt.epochs, i, len(trainData),
                              G.generator.temperature, errD.data[0], errG.data[0], D_x, D_G_z1, D_G_z2))
 
