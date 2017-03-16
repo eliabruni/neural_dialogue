@@ -200,6 +200,7 @@ def H_memoryEfficientLoss(H , dataset, outputs, targets, generator, crit, log_pr
         out_t = generator(out_t)
         pred_t = F.log_softmax(out_t)
         if log_pred:
+            logger.debug('HALLUCINATOR')
             log_predictions(pred_t, targets, H.log['distances'], dataset['dicts']['tgt'])
         loss_t = crit(pred_t, targ_t.view(-1))
         loss += loss_t.data[0]

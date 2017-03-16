@@ -140,8 +140,8 @@ def main():
     valid['src'], valid['tgt'] = makeOSdata(opt.valid)
 
     print('Preparing testing ...')
-    valid = {}
-    valid['src'], valid['tgt'] = makeOSdata(opt.valid)
+    test = {}
+    test['src'], test['tgt'] = makeOSdata(opt.test)
 
     if opt.src_vocab is None:
         saveVocabulary('source', dicts['src'], opt.save_data + '.src.dict')
@@ -152,7 +152,8 @@ def main():
     print('Saving data to \'' + opt.save_data + '-train.pt\'...')
     save_data = {'dicts': dicts,
                  'train': train,
-                 'valid': valid}
+                 'valid': valid,
+                 'test' : test}
     torch.save(save_data, opt.save_data + '-train.pt')
 
 
