@@ -249,12 +249,14 @@ def memoryEfficientLoss(G,H1,H2, outputs, sources, targets, dataset, criterion, 
             log_predictions(pred_t, sources, targets, G.log['distances'], dataset['dicts']['tgt'])
 
         if opt.hallucinate:
+            pert1 = hallucination
             if opt.perturbe_real:
                 pert1 = G.generator.sampler(hallucination)
             # Masking PAD: we do it before softmax, as in generation
             pert1.data[:, onmt.Constants.PAD] = 0
             noise_targets = F.softmax(pert1)
 
+            pert2 = inverse_hallucination
             if opt.perturbe_real:
                 pert2 = G.generator.sampler(inverse_hallucination)
             # Masking PAD: we do it before softmax, as in generation
