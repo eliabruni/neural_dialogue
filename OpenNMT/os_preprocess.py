@@ -91,7 +91,9 @@ def makeOSdata(srcFile):
             tgt_t = lines[2]
             tgt_t = map(int, tgt_t.split(' '))
             tgt_t = [torch.LongTensor(tgt_t)]
-
+            print(len(src_t))
+            print(len(tgt_t))
+            print('')
             if len(src_t) <= opt.seq_length \
                     and len(src_t) >= opt.min_seq_length \
                     and len(tgt_t) <= opt.seq_length \
