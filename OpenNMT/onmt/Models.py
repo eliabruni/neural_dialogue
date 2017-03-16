@@ -194,7 +194,7 @@ class Generator(nn.Module):
         self.dicts = dicts
         self.linear = nn.Linear(opt.rnn_size, dicts.size())
         self.temp_estimator = temp_estimator
-        self.tau0 = 4  # initial temperature
+        self.tau0 = 3  # initial temperature
         self.eps = 1e-20
         self.temperature = self.tau0
         self.real_temperature = self.tau0
