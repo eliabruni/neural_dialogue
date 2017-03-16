@@ -571,7 +571,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
                         # Here we overfeat the discriminator on the fake batch
                         if opt.disc_overfeat > 0:
-                            for j in range(opt.overfeat_k):
+                            for j in range(opt.disc_overfeat):
                                 D_real = D(real.detach())
                                 D_fake = D(fake.detach())
                                 errD = -(torch.mean(D_real) - torch.mean(D_fake))
