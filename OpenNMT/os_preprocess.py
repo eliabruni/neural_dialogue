@@ -101,14 +101,11 @@ def makeOSdata(srcFile, tgtDicts):
                     and len(tgt_t) <= opt.seq_length \
                     and len(tgt_t) >= opt.min_seq_length:
 
-                print('src_t1: ' + str(src_t))
                 src_t = tgtDicts.convertToLabels(src_t,
                                        onmt.OS_Constants.EOS)
-                print('src_t2: ' + str(src_t))
 
                 src_t += [tgtDicts.convertToIdx(src_t,
                                           onmt.OS_Constants.UNK_WORD)]
-                print('src_t3: ' + str(src_t))
 
 
                 tgt_t = tgtDicts.convertToLabels(tgt_t,
