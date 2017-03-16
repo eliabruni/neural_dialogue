@@ -97,17 +97,22 @@ def makeOSdata(srcFile, tgtDicts):
                     and len(tgt_t) <= opt.seq_length \
                     and len(tgt_t) >= opt.min_seq_length:
 
-                src_t = [tgtDicts.convertToIdx(src_t,
-                                       onmt.Constants.UNK_WORD)]
-                src_t += [tgtDicts.convertToIdx(src_t,
-                                          onmt.Constants.UNK_WORD)]
+                print('src_t1: ' + str(src_t))
+                src_t = [tgtDicts.convertToLabels(src_t,
+                                       onmt.OS_Constants.EOS)]
+                print('src_t2: ' + str(src_t))
 
-                tgt_t = [tgtDicts.convertToIdx(tgt_t,
-                                               onmt.Constants.UNK_WORD)]
+                src_t += [tgtDicts.convertToIdx(src_t,
+                                          onmt.OS_Constants.UNK_WORD)]
+                print('src_t3: ' + str(src_t))
+
+
+                tgt_t = [tgtDicts.convertToLabels(tgt_t,
+                                               onmt.OS_Constants.EOS)]
                 tgt_t += [tgtDicts.convertToIdx(tgt_t,
-                                                onmt.Constants.UNK_WORD,
-                                                onmt.Constants.BOS_WORD,
-                                                onmt.Constants.EOS_WORD)]
+                                                onmt.OS_Constants.UNK_WORD,
+                                                onmt.OS_Constants.BOS_WORD,
+                                                onmt.OS_Constants.EOS_WORD)]
 
                 src += [src_t]
                 tgt += [tgt_t]
