@@ -39,7 +39,7 @@ parser.add_argument('-st_conditioning', type=bool, default=False,
                     help='Use st for conditioning generation')
 parser.add_argument('-hallucinate', type=bool, default=False,
                     help='Whether to use supervision')
-parser.add_argument('-perturbe_real', type=bool, default=False,
+parser.add_argument('-perturbe_real', type=bool, default=True,
                     help='Whether to use use gumbel for real data')
 parser.add_argument('-disc_overfeat', type=int, default=0,
                     help='Overfeat the discriminator on the generated batch')
@@ -560,6 +560,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     for p in D.parameters():
                         p.data.clamp_(-0.01, 0.01)
 
+                    # That's the ration between disc train iterations/gen train iterations
                     if i % opt.g_train_interval == 0:
 
                         # if i % G_train_interval == 0:
@@ -568,6 +569,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         ###########################
                         G.zero_grad()
 
+                        # Here we overfeat the discriminator on the fake batch
                         if opt.disc_overfeat > 0:
                             for j in range(opt.overfeat_k):
                                 D_real = D(real.detach())
@@ -576,7 +578,6 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                                 errD.backward()
 
                         D_fake = D(fake)
-
 
                         errG = -torch.mean(D_fake)
 
