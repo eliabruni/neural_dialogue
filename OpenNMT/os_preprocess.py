@@ -139,6 +139,10 @@ def main():
     valid = {}
     valid['src'], valid['tgt'] = makeOSdata(opt.valid)
 
+    print('Preparing testing ...')
+    valid = {}
+    valid['src'], valid['tgt'] = makeOSdata(opt.valid)
+
     if opt.src_vocab is None:
         saveVocabulary('source', dicts['src'], opt.save_data + '.src.dict')
     if opt.tgt_vocab is None:

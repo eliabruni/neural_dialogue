@@ -194,9 +194,10 @@ class Generator(nn.Module):
         self.dicts = dicts
         self.linear = nn.Linear(opt.rnn_size, dicts.size())
         self.temp_estimator = temp_estimator
-        self.tau0 = 1  # initial temperature
+        self.tau0 = 0.5  # initial temperature
         self.eps = 1e-20
         self.temperature = self.tau0
+        self.real_temperature = self.tau0
         self.ANNEAL_RATE = 0.00003
         self.MIN_TEMP = 1
         self.iter_cnt = 0
@@ -234,7 +235,7 @@ class Generator(nn.Module):
 
     def sampler(self, input):
         noise = self.get_noise(input)
-        x = (input + noise) * self.temperature
+        x = (input + noise) * self.real_temperature
         if self.opt.ST:
             # Use ST gumbel-softmax
             y_onehot = torch.FloatTensor(x.size())

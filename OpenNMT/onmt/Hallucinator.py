@@ -130,6 +130,8 @@ class Hallucinator(nn.Module):
 
     def __init__(self, opt, encoder, decoder, generator):
         super(Hallucinator, self).__init__()
+        self.log = {}
+        self.log['distances'] = []
         self.opt = opt
         self.encoder = encoder
         self.decoder = decoder

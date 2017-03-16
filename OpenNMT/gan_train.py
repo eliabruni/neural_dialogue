@@ -43,9 +43,9 @@ parser.add_argument('-hallucinate', type=bool, default=False,
 ## G options
 parser.add_argument('-layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
-parser.add_argument('-rnn_size', type=int, default=20,
+parser.add_argument('-rnn_size', type=int, default=2,
                     help='Size of LSTM hidden states')
-parser.add_argument('-word_vec_size', type=int, default=20,
+parser.add_argument('-word_vec_size', type=int, default=2,
                     help='Word embedding sizes')
 parser.add_argument('-input_feed', type=int, default=0,
                     help="""Feed the context vector at each time step as
@@ -73,7 +73,7 @@ parser.add_argument('-estimate_temp', type=bool, default=False,
                     help='Use automatic estimation of temperature annealing for gumbel')
 
 ## D options
-parser.add_argument('-D_rnn_size', type=int, default=20,
+parser.add_argument('-D_rnn_size', type=int, default=2,
                     help='D: Size fo LSTM hidden states')
 parser.add_argument('-D_dropout', type=float, default=0.3,
                     help='Dropout probability; applied between LSTM stacks.')
@@ -187,7 +187,7 @@ def eval(G, criterion, data, dataset):
     return total_loss / total_words
 
 
-def H_memoryEfficientLoss(outputs, targets, generator, crit, eval=False):
+def H_memoryEfficientLoss(H , dataset, outputs, targets, generator, crit, log_pred=False, eval=False):
     # compute generations one piece at a time
     loss = 0
     outputs = Variable(outputs.data, requires_grad=(not eval), volatile=eval)
@@ -199,6 +199,8 @@ def H_memoryEfficientLoss(outputs, targets, generator, crit, eval=False):
         out_t = out_t.view(-1, out_t.size(2))
         out_t = generator(out_t)
         pred_t = F.log_softmax(out_t)
+        if log_pred:
+            log_predictions(pred_t, targets, H.log['distances'], dataset['dicts']['tgt'])
         loss_t = crit(pred_t, targ_t.view(-1))
         loss += loss_t.data[0]
         if not eval:
@@ -436,7 +438,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         h_outputs = H1(batch)
                         targets = batch[1][1:]  # exclude <s> from targets
                         loss, gradOutput = H_memoryEfficientLoss(
-                            h_outputs, targets, H1.generator, cxt_criterion)
+                            H1, dataset,h_outputs, targets, H1.generator, cxt_criterion, log_pred)
                         h_outputs.backward(gradOutput)
 
                         # update the parameters
@@ -467,7 +469,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         h_outputs = H2((batch[1], batch[0]))
                         inverse_targets = batch[0][:-1]
                         loss, gradOutput = H_memoryEfficientLoss(
-                            h_outputs, inverse_targets, H2.generator, cxt_criterion)
+                            H2, dataset,h_outputs, inverse_targets, H2.generator, cxt_criterion, log_pred)
                         h_outputs.backward(gradOutput)
 
                         # update the parameters
