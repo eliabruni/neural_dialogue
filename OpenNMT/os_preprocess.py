@@ -149,11 +149,11 @@ def main():
 
     print('Preparing training ...')
     train = {}
-    train['src'], train['tgt'] = makeOSdata(opt.train, train['tgt'])
+    train['src'], train['tgt'] = makeOSdata(opt.train, dicts['tgt'])
 
     print('Preparing validation ...')
     valid = {}
-    valid['src'], valid['tgt'] = makeOSdata(opt.valid, train['tgt'])
+    valid['src'], valid['tgt'] = makeOSdata(opt.valid, dicts['tgt'])
 
     print('Preparing testing ...')
     test = {}
