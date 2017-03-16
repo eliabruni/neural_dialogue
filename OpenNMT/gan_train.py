@@ -187,7 +187,7 @@ def eval(G, criterion, data, dataset):
     return total_loss / total_words
 
 
-def H_memoryEfficientLoss(H , dataset, outputs, targets, generator, crit, log_pred=False, eval=False):
+def H_memoryEfficientLoss(H , dataset, outputs, sources, targets, generator, crit, log_pred=False, eval=False):
     # compute generations one piece at a time
     loss = 0
     outputs = Variable(outputs.data, requires_grad=(not eval), volatile=eval)
@@ -200,7 +200,7 @@ def H_memoryEfficientLoss(H , dataset, outputs, targets, generator, crit, log_pr
         out_t = generator(out_t)
         pred_t = F.log_softmax(out_t)
         if log_pred:
-            log_predictions(pred_t, targets, H.log['distances'], dataset['dicts']['tgt'])
+            log_predictions(pred_t, sources, targets, H.log['distances'], dataset['dicts']['tgt'])
         loss_t = crit(pred_t, targ_t.view(-1))
         loss += loss_t.data[0]
         if not eval:
@@ -221,7 +221,7 @@ def memoryEfficientLoss(G,H1,H2, outputs, sources, targets, dataset, criterion, 
         pred_t = pred_t.view(pred_t.size(0) * pred_t.size(1), pred_t.size(2))
 
         if log_pred:
-            log_predictions(pred_t, targets, G.log['distances'], dataset['dicts']['tgt'])
+            log_predictions(pred_t, sources, targets, G.log['distances'], dataset['dicts']['tgt'])
         targ_t = targets.contiguous()
         loss_t = criterion(pred_t, targ_t.view(-1))
         loss += loss_t.data[0]
@@ -232,7 +232,7 @@ def memoryEfficientLoss(G,H1,H2, outputs, sources, targets, dataset, criterion, 
         pred_t = F.log_softmax(outputs)
 
         if log_pred:
-            log_predictions(pred_t, targets, G.log['distances'], dataset['dicts']['tgt'])
+            log_predictions(pred_t, sources, targets, G.log['distances'], dataset['dicts']['tgt'])
         targ_t = targets.contiguous()
         loss_t = criterion(pred_t, targ_t.view(-1))
         loss += loss_t.data[0]
@@ -244,7 +244,7 @@ def memoryEfficientLoss(G,H1,H2, outputs, sources, targets, dataset, criterion, 
         pred_t = F.softmax(outputs)
 
         if log_pred:
-            log_predictions(pred_t, targets, G.log['distances'], dataset['dicts']['tgt'])
+            log_predictions(pred_t, sources, targets, G.log['distances'], dataset['dicts']['tgt'])
 
         if opt.hallucinate:
             pert1 = G.generator.sampler(hallucination)
@@ -297,7 +297,7 @@ def lev_dist(source, target):
     return 0 if np.array_equal(source, target) else jitted_lev_dist(source, target)
 
 
-def log_predictions(pred_t, targ_t, distances, tgt_dict):
+def log_predictions(pred_t, src_t, targ_t, distances, tgt_dict):
     pred_t_data = pred_t.data.cpu().numpy()
     argmaxed_preds = np.argmax(pred_t_data, axis=1)
     argmax_preds_sorted = np.ones((opt.batch_size,argmaxed_preds.size/opt.batch_size ))
@@ -313,9 +313,17 @@ def log_predictions(pred_t, targ_t, distances, tgt_dict):
         for j in range(len(argmax_inputs)):
             argmax_targets[i][j] = argmax_inputs[j][i].astype(int)
 
+    argmax_inputs = src_t.data.cpu().numpy()
+    argmax_sources = np.ones((argmax_inputs[0].size, len(argmax_inputs)))
+
+    for i in range(argmax_inputs[0].size):
+        for j in range(len(argmax_inputs)):
+            argmax_sources[i][j] = argmax_inputs[j][i].astype(int)
+
     argmax_preds_sorted = argmax_preds_sorted.astype(int)
     rand_idx = np.random.randint(len(argmax_preds_sorted))
     logger.debug('SAMPLE:')
+    logger.debug('source: ' + str(" ".join(tgt_dict.convertToLabels(argmax_sources[rand_idx], onmt.Constants.EOS))))
     logger.debug('preds: ' + str(" ".join(tgt_dict.convertToLabels(argmax_preds_sorted[rand_idx], onmt.Constants.EOS))))
     logger.debug('trgts: ' + str(" ".join(tgt_dict.convertToLabels(argmax_targets[rand_idx].astype(int), onmt.Constants.EOS))))
     distances.append(lev_dist(argmax_targets[rand_idx].astype(int), argmax_preds_sorted[rand_idx]))
@@ -367,7 +375,7 @@ def clip_gradient(opt, model):
     totalnorm = math.sqrt(totalnorm)
     return min(1, opt.clip / (totalnorm + 1e-6))
 
-def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=None, H1=None, H2=None, H_crit=None, optimizerH=None, optimizerH2=None):
+def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=None, H1=None, H2=None, H_crit=None, optimizerH1=None, optimizerH2=None):
     logger.info(G)
     G.train()
     if not opt.supervision:
@@ -397,7 +405,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
             batchIdx = batchOrder[i] if epoch >= opt.curriculum else i
             batch = trainData[batchIdx]
-            outputs = G(batch, H1, H_crit, optimizerH, eval=False)
+            outputs = G(batch, H1, H_crit, optimizerH1, eval=False)
             sources = batch[0]
             targets = batch[1][1:]  # exclude <s> from targets
 
@@ -433,18 +441,19 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                 if opt.hallucinate:
                     total_loss, report_loss = 0, 0
                     total_words, report_words = 0, 0
-                    for j in range(5):
+                    for j in range(20):
                         H1.zero_grad()
                         h_outputs = H1(batch)
+                        sources = batch[0]
                         targets = batch[1][1:]  # exclude <s> from targets
                         if log_pred and j == 4:
                             logger.debug("[HALLUCINATOR 1] SAMPLES: ")
                         loss, gradOutput = H_memoryEfficientLoss(
-                            H1, dataset,h_outputs, targets, H1.generator, cxt_criterion, log_pred and j == 4)
+                            H1, dataset,h_outputs, sources, targets, H1.generator, cxt_criterion, log_pred and j == 4)
                         h_outputs.backward(gradOutput)
 
                         # update the parameters
-                        grad_norm = optimizerH.step()
+                        grad_norm = optimizerH1.step()
 
                         report_loss += loss
                         total_loss += loss
@@ -468,11 +477,12 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     for j in range(5):
                         H2.zero_grad()
                         h_outputs = H2((batch[1], batch[0]))
-                        inverse_targets = batch[0][:-1]
+                        inverse_sources = batch[1][1:]
+                        inverse_targets = batch[0][1:]
                         if log_pred and j == 4:
                             logger.debug("[HALLUCINATOR 2] SAMPLES: ")
                         loss, gradOutput = H_memoryEfficientLoss(
-                            H2, dataset,h_outputs, inverse_targets, H2.generator, cxt_criterion, log_pred and j == 4)
+                            H2, dataset,h_outputs, inverse_sources, inverse_targets, H2.generator, cxt_criterion, log_pred and j == 4)
                         h_outputs.backward(gradOutput)
 
                         # update the parameters
