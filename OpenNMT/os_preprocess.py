@@ -62,6 +62,7 @@ def initOSvocabulary(name, vocabFile):
         vocab = onmt.Dict([onmt.OS_Constants.PAD_WORD, onmt.OS_Constants.UNK_WORD,
                            onmt.OS_Constants.BOS_WORD, onmt.OS_Constants.EOS_WORD,
                            onmt.OS_Constants.IEOS_WORD])
+        print(vocab)
     else:
         print('Error: vocab file required.')
 
