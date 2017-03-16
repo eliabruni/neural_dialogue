@@ -58,11 +58,12 @@ def initOSvocabulary(name, vocabFile):
         print('Reading ' + name + ' vocabulary from \'' + vocabFile + '\'...')
         vocab = onmt.Dict(None, lower=opt.lower)
         vocab.loadFile(vocabFile)
-        print('Loaded ' + str(vocab.size()) + ' ' + name + ' words')
-        vocab = onmt.Dict([onmt.OS_Constants.PAD_WORD, onmt.OS_Constants.UNK_WORD,
+
+        vocab.addSpecials([onmt.OS_Constants.PAD_WORD, onmt.OS_Constants.UNK_WORD,
                            onmt.OS_Constants.BOS_WORD, onmt.OS_Constants.EOS_WORD,
                            onmt.OS_Constants.IEOS_WORD])
-        print(vocab)
+
+        print('Loaded ' + str(vocab.size()) + ' ' + name + ' words')
     else:
         print('Error: vocab file required.')
 
