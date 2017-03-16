@@ -86,14 +86,15 @@ def makeOSdata(srcFile):
 
             src_t = lines[0] + ' '  + str(onmt.OS_Constants.IEOS) + ' ' +  lines[1]
             src_t = map(int, src_t.split(' '))
-            src_t = [torch.LongTensor(src_t)]
+            src_t = torch.LongTensor(src_t)
 
             tgt_t = lines[2]
             tgt_t = map(int, tgt_t.split(' '))
-            tgt_t = [torch.LongTensor(tgt_t)]
-            print(len(src_t))
-            print(len(tgt_t))
-            print('')
+            tgt_t = torch.LongTensor(tgt_t)
+
+            # print(len(src_t))
+            # print(len(tgt_t))
+            # print('')
             if len(src_t) <= opt.seq_length \
                     and len(src_t) >= opt.min_seq_length \
                     and len(tgt_t) <= opt.seq_length \
