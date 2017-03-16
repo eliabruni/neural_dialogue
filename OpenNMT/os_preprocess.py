@@ -99,6 +99,8 @@ def makeOSdata(srcFile):
                 src += src_t
                 tgt += tgt_t
 
+                print(len(src))
+
                 sizes += [len(src_t)]
             else:
                 ignored += 1
