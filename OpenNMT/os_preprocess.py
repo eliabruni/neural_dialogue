@@ -79,9 +79,7 @@ def makeOSdata(srcFile):
     while True:
         lines = srcF.readline().split('|')
 
-        if count >= 10000000:
-            print('lines: ' + str(lines))
-        if not lines:
+        if not lines or lines[0] == '':
             break
 
         if len(lines) == 3:
