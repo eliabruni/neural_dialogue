@@ -474,7 +474,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
                     total_loss, report_loss = 0, 0
                     total_words, report_words = 0, 0
-                    for j in range(5):
+                    for j in range(20):
                         H2.zero_grad()
                         inverse_sources = batch[1][1:-1]
                         inverse_targets = batch[0]
