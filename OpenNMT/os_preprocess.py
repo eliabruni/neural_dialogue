@@ -59,7 +59,7 @@ def initOSvocabulary(name, vocabFile):
         vocab = onmt.Dict(None, lower=opt.lower)
         vocab.loadFile(vocabFile)
 
-        vocab.addSpecial(onmt.OS_Constants.PAD_WORD,vocab.size()+1)
+        vocab.addSpecial(onmt.OS_Constants.PAD_WORD,0)
         vocab.addSpecial(onmt.OS_Constants.UNK_WORD,vocab.size()+1)
         vocab.addSpecial(onmt.OS_Constants.BOS_WORD,vocab.size()+1)
         vocab.addSpecial(onmt.OS_Constants.EOS_WORD,vocab.size()+1)
