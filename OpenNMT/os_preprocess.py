@@ -110,6 +110,7 @@ def makeOSdata(srcFile, tgtDicts):
 
                 tgt_t = tgtDicts.convertToLabels(tgt_t,
                                                onmt.OS_Constants.EOS)
+
                 tgt_t += [tgtDicts.convertToIdx(tgt_t,
                                                 onmt.OS_Constants.UNK_WORD,
                                                 onmt.OS_Constants.BOS_WORD,
@@ -163,7 +164,7 @@ def main():
 
     print('Preparing testing ...')
     test = {}
-    test['src'], test['tgt'] = makeOSdata(opt.test, train['tgt'])
+    test['src'], test['tgt'] = makeOSdata(opt.test, dicts['tgt'])
 
     if opt.src_vocab is None:
         saveVocabulary('source', dicts['src'], opt.save_data + '.src.dict')
