@@ -1,6 +1,7 @@
 import onmt
 import torch
 from torch.autograd import Variable
+import torch.nn.functional as F
 
 
 class Translator(object):
@@ -77,21 +78,27 @@ class Translator(object):
 
         #  (2) if a target is specified, compute the 'goldScore'
         #  (i.e. log likelihood) of the target under the model
+        # goldScores = context.data.new(batchSize).zero_()
         goldScores = context.data.new(batchSize).zero_()
-        if tgtBatch is not None:
-            decStates = encStates
-            decOut = self.model.make_init_decoder_output(context)
-            self.model.decoder.apply(applyContextMask)
-            initOutput = self.model.make_init_decoder_output(context)
-
-            decOut, decStates, attn = self.model.decoder(
-                tgtBatch[:-1], decStates, context, initOutput)
-            for dec_t, tgt_t in zip(decOut, tgtBatch[1:].data):
-                gen_t = self.model.generator.forward(dec_t)
-                tgt_t = tgt_t.unsqueeze(1)
-                scores = gen_t.data.gather(1, tgt_t)
-                scores.masked_fill_(tgt_t.eq(onmt.Constants.PAD), 0)
-                goldScores += scores
+        # if tgtBatch is not None:
+        #     decStates = encStates
+        #     decOut = self.model.make_init_decoder_output(context)
+        #     self.model.decoder.apply(applyContextMask)
+        #     initOutput = self.model.make_init_decoder_output(context)
+        #
+        #     decOut, decStates, attn = self.model.decoder(
+        #         tgtBatch[:-1], decStates, context, initOutput)
+        #     for dec_t, tgt_t in zip(decOut, tgtBatch[1:].data):
+        #         print('dec_t: ' + str(dec_t))
+        #         print('tgt_t: ' + str(tgt_t))
+        #         print('decOut: ' + str(decOut))
+        #         print('tgtBatch[1:].data: ' + str(tgtBatch[1:].data))
+        #         gen_t = self.model.generator.forward(dec_t, decStates)
+        #         gen_t = F.softmax(gen_t)
+        #         tgt_t = tgt_t.unsqueeze(1)
+        #         scores = gen_t.data.gather(1, tgt_t)
+        #         scores.masked_fill_(tgt_t.eq(onmt.Constants.PAD), 0)
+        #         goldScores += scores
 
         #  (3) run the decoder to generate sentences, using beam search
 
@@ -120,7 +127,8 @@ class Translator(object):
                 Variable(input), decStates, context, decOut)
             # decOut: 1 x (beam*batch) x numWords
             decOut = decOut.squeeze(0)
-            out = self.model.generator.forward(decOut)
+            out = self.model.generator.forward(decOut, decStates)
+            gen_t = F.softmax(gen_t)
 
             # batch x beam x numWords
             wordLk = out.view(beamSize, remainingSents, -1).transpose(0, 1).contiguous()

@@ -22,12 +22,6 @@ parser.add_argument('-valid', required=True,
 parser.add_argument('-save_data', required=True,
                     help="Output file for the prepared data")
 
-parser.add_argument('-universal_vocab_size', type=int, default=25000,
-                    help="Size of the source vocabulary")
-parser.add_argument('-src_vocab_size', type=int, default=24999,
-                    help="Size of the source vocabulary")
-parser.add_argument('-tgt_vocab_size', type=int, default=24996,
-                    help="Size of the target vocabulary")
 parser.add_argument('-universal_vocab',
                     help="Path to an existing source vocabulary")
 parser.add_argument('-src_vocab',
@@ -35,6 +29,7 @@ parser.add_argument('-src_vocab',
 parser.add_argument('-tgt_vocab',
                     help="Path to an existing target vocabulary")
 
+parser.add_argument('-lower', action='store_true', help='lowercase data')
 
 parser.add_argument('-seq_length', type=int, default=25,
                     help="Maximum sequence length")
@@ -61,7 +56,7 @@ def initOSvocabulary(name, vocabFile):
     if vocabFile is not None:
         # If given, load existing word dictionary.
         print('Reading ' + name + ' vocabulary from \'' + vocabFile + '\'...')
-        vocab = onmt.Dict()
+        vocab = onmt.Dict(None, lower=opt.lower)
         vocab.loadFile(vocabFile)
         print('Loaded ' + str(vocab.size()) + ' ' + name + ' words')
         vocab = onmt.Dict([onmt.OS_Constants.PAD_WORD, onmt.OS_Constants.UNK_WORD,

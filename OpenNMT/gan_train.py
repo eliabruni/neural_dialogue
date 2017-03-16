@@ -629,15 +629,15 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
         # logger.info('Validation perplexity: %g' % valid_ppl)
 
         #  (4) drop a checkpoint
-        # checkpoint = {
-        #     'model': G,
-        #     'dicts': dataset['dicts'],
-        #     'opt': opt,
-        #     'epoch': epoch,
-        #     'optim': optimizerG,
-        # }
-        # torch.save(checkpoint,
-        #            '%s_e%d_%.2f.pt' % (opt.save_model, epoch, valid_ppl))
+        checkpoint = {
+            'model': G,
+            'dicts': dataset['dicts'],
+            'opt': opt,
+            'epoch': epoch,
+            'optim': optimizerG,
+        }
+        torch.save(checkpoint,
+                   '%s_e%d.pt' % (opt.save_model, epoch))
 
 
 def main():

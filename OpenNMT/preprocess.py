@@ -105,7 +105,7 @@ def initOSvocabulary(name, vocabFile):
     if vocabFile is not None:
         # If given, load existing word dictionary.
         print('Reading ' + name + ' vocabulary from \'' + vocabFile + '\'...')
-        vocab = onmt.Dict()
+        vocab = onmt.Dict(None, True)
         vocab.loadFile(vocabFile)
         print('Loaded ' + vocab.size() + ' ' + name + ' words')
     else:
