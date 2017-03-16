@@ -228,14 +228,15 @@ class Generator(nn.Module):
         x = (input + noise)
 
         if temp_estim:
-            x = x * temp_estim.repeat(x.size())
+            x = x / temp_estim.repeat(x.size())
         else:
-            x = x * self.temperature
+            x = x / self.temperature
         return x.view_as(input)
 
     def sampler(self, input):
         noise = self.get_noise(input)
-        x = (input + noise) * self.real_temperature
+        # x = (input + noise) * self.real_temperature
+        x = (input + noise) * self.temperature
         if self.opt.ST:
             # Use ST gumbel-softmax
             y_onehot = torch.FloatTensor(x.size())
