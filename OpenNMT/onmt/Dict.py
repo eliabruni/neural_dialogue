@@ -28,7 +28,6 @@ class Dict(object):
                 label = fields[0]
                 idx = int(fields[1])
             else:
-                print('here:')
                 label = ' '
                 idx = fields[0]
             self.add(label, idx)
