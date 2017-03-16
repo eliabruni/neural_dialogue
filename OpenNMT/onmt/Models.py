@@ -294,11 +294,6 @@ class G(nn.Module):
         self.decoder = decoder
         self.generator = generator
         self.generate = False
-        self.tau0 = 1 # initial temperature
-        self.eps = 1e-20
-        self.temperature = self.tau0
-        self.ANNEAL_RATE = 0.00003
-        self.MIN_TEMP = 1
         self.iter_cnt = 0
 
         # Optionally tie weights as in:

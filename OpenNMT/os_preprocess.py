@@ -18,6 +18,8 @@ parser.add_argument('-train', required=True,
                     help="Path to the training source data")
 parser.add_argument('-valid', required=True,
                     help="Path to the validation source data")
+parser.add_argument('-test', required=True,
+                    help="Path to the test source data")
 
 parser.add_argument('-save_data', required=True,
                     help="Output file for the prepared data")
