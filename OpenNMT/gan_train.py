@@ -482,6 +482,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         eos = torch.LongTensor(1, inverse_targets.size(1)).fill_(onmt.Constants.EOS)
                         if opt.cuda:
                             eos = eos.cuda()
+                            bos = bos.cuda()
                         inverse_targets = Variable(torch.cat([bos,inverse_targets.data],0))
                         inverse_targets = Variable(torch.cat([inverse_targets.data,eos],0))
                         h_outputs = H2((inverse_sources, inverse_targets))
