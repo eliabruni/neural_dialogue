@@ -11,8 +11,6 @@ parser = argparse.ArgumentParser(description='preprocess.lua')
 ##
 
 parser.add_argument('-config',    help="Read options from this file")
-parser.add_argument('-os_data', type=bool, default=False,
-                    help='Whether to use opensubtitles dataset')
 
 parser.add_argument('-train', required=True,
                     help="Path to the training source data")
@@ -83,7 +81,7 @@ def makeOSdata(srcFile):
 
         if len(lines) == 3:
 
-            src_t = lines[0] + ' '  + str(onmt.Constants.IEOS) + ' ' +  lines[1]
+            src_t = lines[0] + ' '  + str(onmt.OS_Constants.IEOS) + ' ' +  lines[1]
             src_t = map(int, src_t.split(' '))
             src_t = [torch.LongTensor(src_t)]
 
