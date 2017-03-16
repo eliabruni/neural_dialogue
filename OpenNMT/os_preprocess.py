@@ -68,7 +68,7 @@ def initOSvocabulary(name, vocabFile):
     print()
     return vocab
 
-def makeOSdata(srcFile):
+def makeOSdata(srcFile, tgtDicts):
     src, tgt = [], []
     sizes = []
     count, ignored = 0, 0
@@ -96,6 +96,19 @@ def makeOSdata(srcFile):
                     and len(src_t) >= opt.min_seq_length \
                     and len(tgt_t) <= opt.seq_length \
                     and len(tgt_t) >= opt.min_seq_length:
+
+                src_t = [tgtDicts.convertToIdx(src_t,
+                                       onmt.Constants.UNK_WORD)]
+                src_t += [tgtDicts.convertToIdx(src_t,
+                                          onmt.Constants.UNK_WORD)]
+
+                tgt_t = [tgtDicts.convertToIdx(tgt_t,
+                                               onmt.Constants.UNK_WORD)]
+                tgt_t += [tgtDicts.convertToIdx(tgt_t,
+                                                onmt.Constants.UNK_WORD,
+                                                onmt.Constants.BOS_WORD,
+                                                onmt.Constants.EOS_WORD)]
+
                 src += [src_t]
                 tgt += [tgt_t]
 
@@ -136,15 +149,15 @@ def main():
 
     print('Preparing training ...')
     train = {}
-    train['src'], train['tgt'] = makeOSdata(opt.train)
+    train['src'], train['tgt'] = makeOSdata(opt.train, train['tgt'])
 
     print('Preparing validation ...')
     valid = {}
-    valid['src'], valid['tgt'] = makeOSdata(opt.valid)
+    valid['src'], valid['tgt'] = makeOSdata(opt.valid, train['tgt'])
 
     print('Preparing testing ...')
     test = {}
-    test['src'], test['tgt'] = makeOSdata(opt.test)
+    test['src'], test['tgt'] = makeOSdata(opt.test, train['tgt'])
 
     if opt.src_vocab is None:
         saveVocabulary('source', dicts['src'], opt.save_data + '.src.dict')

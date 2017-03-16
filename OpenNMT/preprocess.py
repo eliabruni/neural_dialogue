@@ -195,7 +195,7 @@ def makeData(srcFile, tgtFile, srcDicts, tgtDicts):
 
             src += [srcDicts.convertToIdx(srcWords,
                                           onmt.Constants.UNK_WORD)]
-            tgt += [tgtDicts.convertToIdx(tgtWords,
+            tgt += [srcDicts.convertToIdx(tgtWords,
                                           onmt.Constants.UNK_WORD,
                                           onmt.Constants.BOS_WORD,
                                           onmt.Constants.EOS_WORD)]
