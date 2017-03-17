@@ -1,3 +1,4 @@
+PAD 0
 UNknown 1
 . 2
 , 3
@@ -24998,3 +24999,7 @@ drawbridge 24997
 reconstruct 24998
 barr 24999
 quixote 25000
+UNK 25002
+BOS 25003
+EOS 25004
+IEOS 25005
