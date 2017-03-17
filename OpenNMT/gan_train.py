@@ -41,11 +41,10 @@ parser.add_argument('-hallucinate', type=bool, default=False,
                     help='Whether to use supervision')
 parser.add_argument('-perturbe_real', type=bool, default=True,
                     help='Whether to use use gumbel for real data')
-parser.add_argument('-disc_overfeat', type=int, default=0,
-                    help='Overfeat the discriminator on the generated batch')
+parser.add_argument('-h_overfeat', type=int, default=10,
+                    help='Overfeat the hallucinator on each batch')
 parser.add_argument('-g_train_interval', type=int, default=5,
                     help='After how many discriminator train iters to train the generator')
-
 
 
 ## G options
@@ -74,8 +73,6 @@ parser.add_argument('-use_gumbel', type=bool, default=False,
 parser.add_argument('-gumbel_anneal_interval', type=int, default=-1,
                     help="""Temperature annealing interval for gumbel. -1 to switch
                          off the annealing""")
-parser.add_argument('-ST', type=bool, default=False,
-                    help='ST gumbel softmax')
 
 parser.add_argument('-estimate_temp', type=bool, default=False,
                     help='Use automatic estimation of temperature annealing for gumbel')
@@ -358,21 +355,16 @@ def one_hot(G, input, num_input_symbols):
             y_onehot = y_onehot.cuda()
         y_onehot.zero_()
 
-        if opt.ST:
-            # Use ST gumbel-softmax
-            y_onehot.scatter_(1, input[i].unsqueeze(1), 1)
-            one_hot_tensor[i] = y_onehot
-        else:
-            # Use soft gumbel-softmax
-            y_onehot = Variable(y_onehot.scatter_(1, input[i].unsqueeze(1), num_input_symbols))
+        # Use soft gumbel-softmax
+        y_onehot = Variable(y_onehot.scatter_(1, input[i].unsqueeze(1), num_input_symbols))
 
-            pert = G.generator.sampler(y_onehot)
+        pert = G.generator.sampler(y_onehot)
 
-            # Masking PAD: we do it before softmax, as in generation
-            pert.data[:, onmt.Constants.PAD] = 0
-            pert = F.softmax(pert)
+        # Masking PAD: we do it before softmax, as in generation
+        pert.data[:, onmt.Constants.PAD] = 0
+        pert = F.softmax(pert)
 
-            one_hot_tensor[i] = pert.data
+        one_hot_tensor[i] = pert.data
 
     one_hot_tensor = torch.transpose(one_hot_tensor,1,0)
     return Variable(one_hot_tensor.contiguous().view(one_hot_tensor.size()[0]*one_hot_tensor.size()[1], one_hot_tensor.size()[2]))
@@ -440,20 +432,14 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                            math.exp(report_loss / report_words),
                            report_words / (time.time() - start),
                            time.time() - start_time))
-                    if opt.use_gumbel:
-                        learned_temp = G.temperature
-                        logger.info("Generated temp: %.4f " % (learned_temp))
-                        # print("Real temp: %.4f, Generated temp: %.4f " % (G.generator.real_temp, learned_temp))
             else:
-
-
 
                 log_pred = i % (opt.log_interval) == 0 and i > 0
 
                 if opt.hallucinate:
                     total_loss, report_loss = 0, 0
                     total_words, report_words = 0, 0
-                    for j in range(10):
+                    for j in range(opt.h_overfeat):
                         H1.zero_grad()
                         h_outputs = H1(batch)
                         sources = batch[0]
@@ -461,7 +447,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         if log_pred and j == 4:
                             logger.debug("[HALLUCINATOR 1] SAMPLES: ")
                         loss, gradOutput = H_memoryEfficientLoss(
-                            H1, dataset,h_outputs, sources, targets, H1.generator, cxt_criterion, log_pred and j == 4)
+                            H1, dataset,h_outputs, sources, targets, H1.generator, cxt_criterion, log_pred and j == opt.h_overfeat-1)
                         h_outputs.backward(gradOutput)
 
                         # update the parameters
@@ -473,7 +459,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         total_words += num_words
                         report_words += num_words
 
-                        if i % opt.log_interval == 0 and i > 0 and j == 4:
+                        if i % opt.log_interval == 0 and i > 0 and j == opt.h_overfeat-1:
                             logger.debug("Epoch %2d, %5d/%5d batches; perplexity: %6.2f; %3.0f tokens/s\n'" %
                                   (epoch, i, len(trainData),
                                    math.exp(report_loss / report_words),
@@ -486,7 +472,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
                     total_loss, report_loss = 0, 0
                     total_words, report_words = 0, 0
-                    for j in range(10):
+                    for j in range(opt.h_overfeat):
                         H2.zero_grad()
                         inverse_sources = batch[1][1:-1]
                         inverse_targets = batch[0]
@@ -499,10 +485,10 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         inverse_targets = Variable(torch.cat([inverse_targets.data,eos],0))
                         h_outputs = H2((inverse_sources, inverse_targets))
                         inverse_targets = inverse_targets[1:]
-                        if log_pred and j == 4:
+                        if log_pred and j == opt.h_overfeat-1:
                             logger.debug("[HALLUCINATOR 2] SAMPLES: ")
                         loss, gradOutput = H_memoryEfficientLoss(
-                            H2, dataset,h_outputs, inverse_sources, inverse_targets, H2.generator, cxt_criterion, log_pred and j == 4)
+                            H2, dataset,h_outputs, inverse_sources, inverse_targets, H2.generator, cxt_criterion, log_pred and j == opt.h_overfeat-1)
                         h_outputs.backward(gradOutput)
 
                         # update the parameters
@@ -513,7 +499,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         num_words = inverse_targets.data.ne(onmt.Constants.PAD).sum()
                         total_words += num_words
                         report_words += num_words
-                        if i % opt.log_interval == 0 and i > 0 and j == 4:
+                        if i % opt.log_interval == 0 and i > 0 and j == 9:
                             logger.debug("Epoch %2d, %5d/%5d batches; perplexity: %6.2f; %3.0f tokens/s\n'" %
                                   (epoch, i, len(trainData),
                                    math.exp(report_loss / report_words),
@@ -568,15 +554,6 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         # (2) Update G network: maximize log(D(G(z)))
                         ###########################
                         G.zero_grad()
-
-                        # Here we overfeat the discriminator on the fake batch
-                        if opt.disc_overfeat > 0:
-                            for j in range(opt.disc_overfeat):
-                                D_real = D(real.detach())
-                                D_fake = D(fake.detach())
-                                errD = -(torch.mean(D_real) - torch.mean(D_fake))
-                                errD.backward()
-                                optimizerD.step()
 
                         D_fake = D(fake)
 

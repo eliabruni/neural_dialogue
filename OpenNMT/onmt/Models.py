@@ -85,22 +85,18 @@ class Decoder(nn.Module):
 
         super(Decoder, self).__init__()
         self.generator = generator
-        self.word_lut = nn.Embedding(dicts.size(),
-                                  opt.word_vec_size,
-                                  padding_idx=onmt.Constants.PAD)
         if not self.opt.st_conditioning:
             self.word_lut_unsup = nn.Linear(dicts.size(), opt.word_vec_size)
+        else:
+            self.word_lut = nn.Embedding(dicts.size(),
+                                         opt.word_vec_size,
+                                         padding_idx=onmt.Constants.PAD)
 
         self.rnn = StackedLSTM(opt.layers, input_size, opt.rnn_size, opt.dropout)
         self.attn = onmt.modules.GlobalAttention(opt.rnn_size)
         self.dropout = nn.Dropout(opt.dropout)
 
         self.hidden_size = opt.rnn_size
-
-        self.mask = None
-
-        def applyMask(self, mask):
-            self.mask = mask
 
         if opt.pre_word_vecs_enc is not None:
             pretrained = torch.load(opt.pre_word_vecs_dec)
@@ -156,25 +152,17 @@ class Decoder(nn.Module):
                     emb_t = torch.cat([emb_t, output], 1)
 
                 output, hidden = self.rnn(emb_t, hidden)
-
                 output, attn = self.attn(output, context.t())
-
                 output = self.dropout(output)
-
-                out_t, _ = self.generator(output, hidden)
+                out_t = self.generator(output, hidden)
 
                 # Masking PAD
                 out_t.data[:,onmt.Constants.PAD] = 0
-
                 out_t_sofmtmaxed = F.softmax(out_t)
+
                 if self.opt.st_conditioning:
-                    pred_t_data = out_t_sofmtmaxed.data.cpu().numpy()
-                    argmaxed_preds = np.argmax(pred_t_data, axis=1)
-                    argmaxed_preds = torch.from_numpy(argmaxed_preds)
-                    argmaxed_preds = Variable(argmaxed_preds)
-                    if self.opt.cuda:
-                        argmaxed_preds = argmaxed_preds.cuda()
-                    emb_t = self.word_lut(argmaxed_preds)
+                    argmaxed_preds  = torch.max(out_t_sofmtmaxed.data, 1)[1].squeeze()
+                    emb_t = self.word_lut(Variable(argmaxed_preds))
                     if self.opt.batch_size == 1:
                         emb_t = emb_t.unsqueeze(0)
                 else:
@@ -237,22 +225,10 @@ class Generator(nn.Module):
         noise = self.get_noise(input)
         # x = (input + noise) * self.real_temperature
         x = (input + noise) * self.temperature
-        if self.opt.ST:
-            # Use ST gumbel-softmax
-            y_onehot = torch.FloatTensor(x.size())
-            if self.opt.cuda:
-                y_onehot = y_onehot.cuda()
-            y_onehot.zero_()
-            max, idx = torch.max(x, 1)
-            y_onehot.scatter_(1, idx.data, 1)
-            return Variable(y_onehot).detach()
-        else:
-            return x.view_as(input)
+        return x.view_as(input)
 
     def forward(self, input, dec_hidden):
         out = self.linear(input)
-
-        y_onehot = None
 
         if self.opt.use_gumbel:
             if self.opt.estimate_temp:
@@ -267,7 +243,7 @@ class Generator(nn.Module):
             else:
                 out = self.estim_sampler(out)
 
-        return out, y_onehot
+        return out
 
 class TempEstimator(nn.Module):
     def __init__(self, opt):
@@ -334,18 +310,6 @@ class G(nn.Module):
         if self.opt.supervision:
             out = out.view(-1, out.size(2))
             out = self.generator(out)
-            if self.opt.use_gumbel:
-                if self.opt.estimate_temp:
-                    h = dec_hidden[0].view(self.opt.layers * self.opt.batch_size * self.opt.rnn_size)
-                    if self.opt.brnn:
-                        h1 = dec_hidden[1].view(self.opt.layers * self.opt.batch_size * self.opt.rnn_size)
-                        h = torch.cat([h, h1], 0)
-                    temp_estim = self.temp_estimator(h.unsqueeze(0))
-                    temp_estim = temp_estim + 0.5
-                    self.temperature = temp_estim.data[0][0]
-                    out = self.estim_sampler(out, temp_estim)
-                else:
-                    out = self.estim_sampler(out)
         return out
 
 class D(nn.Module):
