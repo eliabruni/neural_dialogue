@@ -176,7 +176,7 @@ def main():
                  'train': train,
                  'valid': valid,
                  'test' : test}
-    torch.save(save_data, opt.save_data + '-train.pt')
+    torch.save(save_data, opt.save_data + 'os-train.pt')
 
 
 if __name__ == "__main__":
