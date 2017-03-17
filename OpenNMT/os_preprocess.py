@@ -171,7 +171,7 @@ def main():
         saveVocabulary('target', dicts['tgt'], opt.save_data + '.tgt.dict')
 
 
-    print('Saving data to \'' + opt.save_data + '-train.pt\'...')
+    print('Saving data to \'' + opt.save_data + 'os-train.pt\'...')
     save_data = {'dicts': dicts,
                  'train': train,
                  'valid': valid,
