@@ -59,7 +59,11 @@ def initOSvocabulary(name, vocabFile):
         vocab = onmt.Dict(None, lower=opt.lower)
         vocab.loadFile(vocabFile)
 
-
+        vocab.addSpecial(onmt.OS_Constants.PAD_WORD,0)
+        vocab.addSpecial(onmt.OS_Constants.UNK_WORD,25001)
+        vocab.addSpecial(onmt.OS_Constants.BOS_WORD,25002)
+        vocab.addSpecial(onmt.OS_Constants.EOS_WORD,25003)
+        vocab.addSpecial(onmt.OS_Constants.IEOS_WORD,25004)
 
         print('Loaded ' + str(vocab.size()) + ' ' + name + ' words')
     else:
