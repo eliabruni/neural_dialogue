@@ -104,20 +104,19 @@ def makeOSdata(srcFile, tgtDicts):
                 src_t = tgtDicts.convertToLabels(src_t,
                                        onmt.OS_Constants.EOS)
 
-                src_t += [tgtDicts.convertToIdx(src_t,
+                src += [tgtDicts.convertToIdx(src_t,
                                           onmt.OS_Constants.UNK_WORD)]
 
 
                 tgt_t = tgtDicts.convertToLabels(tgt_t,
                                                onmt.OS_Constants.EOS)
 
-                tgt_t += [tgtDicts.convertToIdx(tgt_t,
+                tgt += [tgtDicts.convertToIdx(tgt_t,
                                                 onmt.OS_Constants.UNK_WORD,
                                                 onmt.OS_Constants.BOS_WORD,
                                                 onmt.OS_Constants.EOS_WORD)]
 
-                src += [src_t]
-                tgt += [tgt_t]
+
 
                 sizes += [len(src_t)]
             else:
