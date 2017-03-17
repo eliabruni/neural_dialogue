@@ -261,7 +261,7 @@ class Generator(nn.Module):
                     h1 = dec_hidden[1].view(self.opt.layers * self.opt.batch_size * self.opt.rnn_size)
                     h = torch.cat([h, h1], 0)
                 temp_estim = self.temp_estimator(h.unsqueeze(0))
-                temp_estim = temp_estim + 1
+                temp_estim = temp_estim + 0.5
                 self.temperature = temp_estim.data[0][0]
                 out = self.estim_sampler(out, temp_estim)
             else:
@@ -341,7 +341,7 @@ class G(nn.Module):
                         h1 = dec_hidden[1].view(self.opt.layers * self.opt.batch_size * self.opt.rnn_size)
                         h = torch.cat([h, h1], 0)
                     temp_estim = self.temp_estimator(h.unsqueeze(0))
-                    temp_estim = temp_estim + 1
+                    temp_estim = temp_estim + 0.5
                     self.temperature = temp_estim.data[0][0]
                     out = self.estim_sampler(out, temp_estim)
                 else:
