@@ -279,6 +279,8 @@ def memoryEfficientLoss(G,H1,H2, outputs, sources, targets, dataset, criterion, 
         ieos = torch.FloatTensor(opt.batch_size, dataset['dicts']['tgt'].size()).zero_()
         ieos[:, onmt.Constants.EOS] = 1
         ieos = Variable(ieos)
+        if opt.cuda:
+            ieos = ieos.cuda()
         noise_sources = torch.cat([noise_sources, ieos], 0)
         if opt.cuda:
             noise_sources = noise_sources.cuda()
