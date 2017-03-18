@@ -44,7 +44,7 @@ parser.add_argument('-perturbe_real', type=bool, default=True,
                     help='Whether to use use gumbel for real data')
 parser.add_argument('-h_overfeat', type=int, default=10,
                     help='Overfeat the hallucinator on each batch')
-parser.add_argument('-g_train_interval', type=int, default=5,
+parser.add_argument('-g_train_interval', type=int, default=2,
                     help='After how many discriminator train iters to train the generator')
 parser.add_argument('-multi_fake', type=bool, default=False,
                     help='Whether to use supervision')
@@ -325,7 +325,7 @@ def memoryEfficientLoss(G,H1,H2, outputs, sources, targets, dataset, criterion, 
         else:
             fake = torch.cat([noise_sources, pred_t], 0)
 
-    return fake, real, loss
+    return fake, fake_mode, real, loss
 
 
 def lev_dist(source, target):
@@ -461,7 +461,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
             if opt.supervision:
                 G.zero_grad()
                 log_pred = i % (opt.log_interval) == 0 and i > 0
-                _, _, loss = memoryEfficientLoss(
+                _, _, _, loss = memoryEfficientLoss(
                     G, outputs, sources, targets, dataset, cxt_criterion, H1, log_pred)
 
                 # update the parameters
@@ -557,7 +557,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
                 if log_pred:
                     logger.debug("[GENERATOR]:")
-                fake, real, _= memoryEfficientLoss(
+                fake,fake_mode, real, _= memoryEfficientLoss(
                     G,H1,H2, outputs, sources, targets, dataset, None, hallucination, inverse_hallucination, log_pred)
 
                 fake = fake.contiguous().view(fake.size()[0]/opt.batch_size,opt.batch_size,fake.size()[1])
@@ -589,7 +589,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         p.data.clamp_(-0.01, 0.01)
 
                     # That's the ration between disc train iterations/gen train iterations
-                    if i % opt.g_train_interval == 0:
+                    if i % opt.g_train_interval == 0 and fake_mode == 0:
 
                         ############################
                         # (2) Update G network: maximize log(D(G(z)))
