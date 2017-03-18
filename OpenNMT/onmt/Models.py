@@ -388,7 +388,7 @@ class D(nn.Module):
         if self.opt.cuda:
             c = c.cuda()
 
-        onehot_embeds, hidden = self.rnn0(onehot_embeds, (h, c))
+        onehot_embeds, hidden = self.rnn0(onehot_embeds, hidden)
         outputs, (hn,_) = self.rnn1(onehot_embeds, hidden)
         hn1 = hn.transpose(0, 1).contiguous().view(_batch_size, -1)
         hn2 = torch.cat([hn[0], hn[1]], 1)
