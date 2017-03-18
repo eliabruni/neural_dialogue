@@ -379,6 +379,16 @@ class D(nn.Module):
         c_0 = Variable(onehot_embeds.data.new(*h_size).zero_(), requires_grad=False)
         hidden = (h_0, c_0)
         onehot_embeds, hidden = self.rnn0(onehot_embeds, hidden)
+
+        _batch_size = onehot_embeds.size(1)
+        h = Variable(torch.zeros(1 * 2, _batch_size, self.rnn_size))
+        if self.opt.cuda:
+            h = h.cuda()
+        c = Variable(torch.zeros(1 * 2, _batch_size, self.rnn_size))
+        if self.opt.cuda:
+            c = c.cuda()
+
+
         outputs, (hn,_) = self.rnn1(onehot_embeds, hidden)
         hn1 = hn.transpose(0, 1).contiguous().view(_batch_size, -1)
         hn2 = torch.cat([hn[0], hn[1]], 1)
