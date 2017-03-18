@@ -3,9 +3,7 @@ import torch.nn as nn
 from torch.autograd import Variable
 import onmt.modules
 import torch.nn.functional as F
-import numpy as np
 
-_INF = float('inf')
 class Encoder(nn.Module):
 
     def __init__(self, opt, dicts):
@@ -18,7 +16,7 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
         self.word_lut = nn.Embedding(dicts.size(),
                                   opt.word_vec_size,
-                                  padding_idx=onmt.Constants.PAD)
+                                  padding_idx=onmt.OS_Constants.PAD)
         self.rnn = nn.LSTM(inputSize, self.hidden_size,
                         num_layers=opt.layers,
                         dropout=opt.dropout,
@@ -90,7 +88,7 @@ class Decoder(nn.Module):
         else:
             self.word_lut = nn.Embedding(dicts.size(),
                                          opt.word_vec_size,
-                                         padding_idx=onmt.Constants.PAD)
+                                         padding_idx=onmt.OS_Constants.PAD)
 
         self.rnn = StackedLSTM(opt.layers, input_size, opt.rnn_size, opt.dropout)
         self.attn = onmt.modules.GlobalAttention(opt.rnn_size)
@@ -129,10 +127,10 @@ class Decoder(nn.Module):
             outputs = torch.stack(outputs)
         else:
             if self.opt.st_conditioning:
-                emb_t = Variable(torch.LongTensor(1, self.opt.batch_size).zero_().fill_(onmt.Constants.BOS))
+                emb_t = Variable(torch.LongTensor(1, self.opt.batch_size).zero_().fill_(onmt.OS_Constants.BOS))
             else:
                 emb_t = torch.FloatTensor(self.opt.batch_size, self.dicts.size()).zero_()
-                emb_t[:, onmt.Constants.BOS] = 1
+                emb_t[:, onmt.OS_Constants.BOS] = 1
                 emb_t = Variable(emb_t)
 
             if self.opt.cuda:
@@ -157,7 +155,7 @@ class Decoder(nn.Module):
                 out_t = self.generator(output, hidden)
 
                 # Masking PAD
-                out_t.data[:,onmt.Constants.PAD] = 0
+                out_t.data[:,onmt.OS_Constants.PAD] = 0
                 out_t_sofmtmaxed = F.softmax(out_t)
 
                 if self.opt.st_conditioning:
@@ -312,7 +310,7 @@ class G(nn.Module):
             out = self.generator(out)
         return out
 
-class D(nn.Module):
+class D2(nn.Module):
     def __init__(self, opt, dicts):
         self.opt = opt
         self.vocab_size = dicts.size()
@@ -339,6 +337,49 @@ class D(nn.Module):
             c = c.cuda()
         outputs, (hn,_) = self.rnn1(onehot_embeds, (h, c))
 
+        hn1 = hn.transpose(0, 1).contiguous().view(_batch_size, -1)
+        hn2 = torch.cat([hn[0], hn[1]], 1)
+        diff = (hn1 - hn2).norm().data[0]
+        assert diff == 0
+        out, attn = self.attn(hn2,torch.transpose(outputs,1,0))
+        out = self.l_out(out)
+        if not self.opt.wasser:
+            out = self.sigmoid(out)
+        return out
+
+class D(nn.Module):
+    def __init__(self, opt, dicts):
+        self.opt = opt
+        self.vocab_size = dicts.size()
+        self.rnn_size = opt.D_rnn_size
+        self.num_directions = 2 if opt.brnn else 1
+        super(D, self).__init__()
+        self.onehot_embedding = nn.Linear(self.vocab_size, self.rnn_size)
+        self.rnn0 = nn.LSTM(self.rnn_size, self.rnn_size,
+                        num_layers=opt.d_layers,
+                        dropout=opt.dropout,
+                        bidirectional=opt.brnn)
+        self.rnn1 = nn.LSTM(self.rnn_size*self.num_directions, self.rnn_size,
+                            1,
+                            bidirectional=True,
+                            dropout=opt.dropout)
+        self.attn = onmt.modules.GlobalAttention(self.rnn_size*2)
+        self.l_out = nn.Linear(self.rnn_size * 2, 1)
+        if not self.opt.wasser:
+            self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+
+        onehot_embeds = self.onehot_embedding(x.contiguous().view(x.size()[0]*x.size()[1], x.size()[2]))
+        onehot_embeds = onehot_embeds.view(x.size()[0], x.size()[1], onehot_embeds.size()[1])
+
+        _batch_size = onehot_embeds.size(1)
+        h_size = (self.opt.d_layers * self.num_directions, _batch_size, self.rnn_size)
+        h_0 = Variable(onehot_embeds.data.new(*h_size).zero_(), requires_grad=False)
+        c_0 = Variable(onehot_embeds.data.new(*h_size).zero_(), requires_grad=False)
+        hidden = (h_0, c_0)
+        onehot_embeds, hidden = self.rnn0(onehot_embeds, hidden)
+        outputs, (hn,_) = self.rnn1(onehot_embeds, hidden)
         hn1 = hn.transpose(0, 1).contiguous().view(_batch_size, -1)
         hn2 = torch.cat([hn[0], hn[1]], 1)
         diff = (hn1 - hn2).norm().data[0]

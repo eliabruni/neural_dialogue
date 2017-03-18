@@ -82,6 +82,8 @@ parser.add_argument('-D_rnn_size', type=int, default=100,
                     help='D: Size fo LSTM hidden states')
 parser.add_argument('-D_dropout', type=float, default=0.3,
                     help='Dropout probability; applied between LSTM stacks.')
+parser.add_argument('-d_layers', type=int, default=3,
+                    help='Number of layers in the LSTM encoder/decoder')
 
 ## Hallucinator options
 parser.add_argument('-H_rnn_size', type=int, default=5,
@@ -162,7 +164,7 @@ if torch.cuda.is_available():
 
 def NMTCriterion(vocabSize):
     weight = torch.ones(vocabSize)
-    weight[onmt.Constants.PAD] = 0
+    weight[onmt.OS_Constants.PAD] = 0
     crit = nn.NLLLoss(weight, size_average=False)
     if opt.cuda:
         crit.cuda()
@@ -184,7 +186,7 @@ def eval(G, criterion, data, dataset):
         _, _, loss  = memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, False, False, True)
 
         total_loss += loss
-        total_words += targets.data.ne(onmt.Constants.PAD).sum()
+        total_words += targets.data.ne(onmt.OS_Constants.PAD).sum()
 
     G.train()
     if not opt.supervision:
@@ -256,14 +258,14 @@ def memoryEfficientLoss(G,H1,H2, outputs, sources, targets, dataset, criterion, 
             if opt.perturbe_real:
                 pert1 = G.generator.sampler(hallucination)
             # Masking PAD: we do it before softmax, as in generation
-            pert1.data[:, onmt.Constants.PAD] = 0
+            pert1.data[:, onmt.OS_Constants.PAD] = 0
             noise_targets = F.softmax(pert1)
 
             pert2 = inverse_hallucination
             if opt.perturbe_real:
                 pert2 = G.generator.sampler(inverse_hallucination)
             # Masking PAD: we do it before softmax, as in generation
-            pert2.data[:, onmt.Constants.PAD] = 0
+            pert2.data[:, onmt.OS_Constants.PAD] = 0
             noise_sources = F.softmax(pert2)
 
 
@@ -273,10 +275,16 @@ def memoryEfficientLoss(G,H1,H2, outputs, sources, targets, dataset, criterion, 
             noise_sources = one_hot(G, sources.data,
                                     dataset['dicts']['src'].size())
 
+        # Adding ieos to sources before concatenating with targets
+        ieos = torch.FloatTensor(opt.batch_size, dataset['dicts']['tgt'].size()).zero_()
+        ieos[:, onmt.OS_Constants.IEOS] = 1
+        ieos = Variable(ieos)
+        noise_sources = torch.cat([noise_sources, ieos], 0)
         if opt.cuda:
             noise_sources = noise_sources.cuda()
             noise_targets = noise_targets.cuda()
             pred_t = pred_t.cuda()
+
         fake = torch.cat([noise_sources, pred_t], 0)
         real = torch.cat([noise_sources,noise_targets],0)
 
@@ -332,9 +340,9 @@ def log_predictions(pred_t, src_t, targ_t, distances, tgt_dict):
     argmax_preds_sorted = argmax_preds_sorted.astype(int)
     rand_idx = np.random.randint(len(argmax_preds_sorted))
     logger.debug('SAMPLE:')
-    logger.debug('source: ' + str(" ".join(tgt_dict.convertToLabels(argmax_sources[rand_idx], onmt.Constants.EOS))))
-    logger.debug('preds: ' + str(" ".join(tgt_dict.convertToLabels(argmax_preds_sorted[rand_idx], onmt.Constants.EOS))))
-    logger.debug('trgts: ' + str(" ".join(tgt_dict.convertToLabels(argmax_targets[rand_idx].astype(int), onmt.Constants.EOS))))
+    logger.debug('source: ' + str(" ".join(tgt_dict.convertToLabels(argmax_sources[rand_idx], onmt.OS_Constants.EOS))))
+    logger.debug('preds: ' + str(" ".join(tgt_dict.convertToLabels(argmax_preds_sorted[rand_idx], onmt.OS_Constants.EOS))))
+    logger.debug('trgts: ' + str(" ".join(tgt_dict.convertToLabels(argmax_targets[rand_idx].astype(int), onmt.OS_Constants.EOS))))
     distances.append(lev_dist(argmax_targets[rand_idx].astype(int), argmax_preds_sorted[rand_idx]))
     if len(distances) <= 10:
         avg_dist = np.mean(distances)
@@ -361,7 +369,7 @@ def one_hot(G, input, num_input_symbols):
         pert = G.generator.sampler(y_onehot)
 
         # Masking PAD: we do it before softmax, as in generation
-        pert.data[:, onmt.Constants.PAD] = 0
+        pert.data[:, onmt.OS_Constants.PAD] = 0
         pert = F.softmax(pert)
 
         one_hot_tensor[i] = pert.data
@@ -423,7 +431,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                 grad_norm = optimizerG.step()
                 report_loss += loss
                 total_loss += loss
-                num_words = targets.data.ne(onmt.Constants.PAD).sum()
+                num_words = targets.data.ne(onmt.OS_Constants.PAD).sum()
                 total_words += num_words
                 report_words += num_words
                 if i % opt.log_interval == 0 and i > 0:
@@ -445,7 +453,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         sources = batch[0]
                         targets = batch[1][1:]  # exclude <s> from targets
                         if log_pred and j == 4:
-                            logger.debug("[HALLUCINATOR 1] SAMPLES: ")
+                            logger.debug("[HALLUCINATOR 1]:")
                         loss, gradOutput = H_memoryEfficientLoss(
                             H1, dataset,h_outputs, sources, targets, H1.generator, cxt_criterion, log_pred and j == opt.h_overfeat-1)
                         h_outputs.backward(gradOutput)
@@ -455,7 +463,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
                         report_loss += loss
                         total_loss += loss
-                        num_words = targets.data.ne(onmt.Constants.PAD).sum()
+                        num_words = targets.data.ne(onmt.OS_Constants.PAD).sum()
                         total_words += num_words
                         report_words += num_words
 
@@ -476,8 +484,8 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         H2.zero_grad()
                         inverse_sources = batch[1][1:-1]
                         inverse_targets = batch[0]
-                        bos = torch.LongTensor(1, inverse_targets.size(1)).fill_(onmt.Constants.BOS)
-                        eos = torch.LongTensor(1, inverse_targets.size(1)).fill_(onmt.Constants.EOS)
+                        bos = torch.LongTensor(1, inverse_targets.size(1)).fill_(onmt.OS_Constants.BOS)
+                        eos = torch.LongTensor(1, inverse_targets.size(1)).fill_(onmt.OS_Constants.EOS)
                         if opt.cuda:
                             eos = eos.cuda()
                             bos = bos.cuda()
@@ -486,7 +494,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         h_outputs = H2((inverse_sources, inverse_targets))
                         inverse_targets = inverse_targets[1:]
                         if log_pred and j == opt.h_overfeat-1:
-                            logger.debug("[HALLUCINATOR 2] SAMPLES: ")
+                            logger.debug("[HALLUCINATOR 2]:")
                         loss, gradOutput = H_memoryEfficientLoss(
                             H2, dataset,h_outputs, inverse_sources, inverse_targets, H2.generator, cxt_criterion, log_pred and j == opt.h_overfeat-1)
                         h_outputs.backward(gradOutput)
@@ -496,7 +504,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
                         report_loss += loss
                         total_loss += loss
-                        num_words = inverse_targets.data.ne(onmt.Constants.PAD).sum()
+                        num_words = inverse_targets.data.ne(onmt.OS_Constants.PAD).sum()
                         total_words += num_words
                         report_words += num_words
                         if i % opt.log_interval == 0 and i > 0 and j == 9:
@@ -504,16 +512,14 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                                   (epoch, i, len(trainData),
                                    math.exp(report_loss / report_words),
                                    report_words / (time.time() - start)))
-
                         report_loss = report_words = 0
-
 
                     h_outputs = H2((inverse_sources, inverse_targets))
                     h_outputs = h_outputs.view(-1, h_outputs.size(2))
                     inverse_hallucination = H2.generator(h_outputs)
 
                 if log_pred:
-                    logger.debug("[GENERATOR] SAMPLES:      ")
+                    logger.debug("[GENERATOR]:")
                 fake, real, _= memoryEfficientLoss(
                     G,H1,H2, outputs, sources, targets, dataset, None, hallucination, inverse_hallucination, log_pred)
 
@@ -532,9 +538,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
                     # train with fake
                     D_fake = D(fake.detach())
-
                     D_G_z1 = D_fake.data.mean()
-
                     errD = -(torch.mean(D_real) - torch.mean(D_fake))
                     errD.backward()
 
@@ -549,18 +553,13 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     # That's the ration between disc train iterations/gen train iterations
                     if i % opt.g_train_interval == 0:
 
-                        # if i % G_train_interval == 0:
                         ############################
                         # (2) Update G network: maximize log(D(G(z)))
                         ###########################
                         G.zero_grad()
-
                         D_fake = D(fake)
-
                         errG = -torch.mean(D_fake)
-
                         errG.backward()
-
                         D_G_z2 = D_fake.data.mean()
 
                         # print('ITERATION: ')
@@ -613,7 +612,6 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         errG = criterion(D_fake, label)
 
                     errG.backward()
-
                     D_G_z2 = D_fake.data.mean()
 
                     # print('ITERATION: ')

@@ -88,7 +88,7 @@ def makeOSdata(srcFile, tgtDicts):
 
         if len(lines) == 3:
 
-            src_t = lines[0] + ' '  + str(onmt.OS_Constants.IEOS) + ' ' +  lines[1]
+            src_t = lines[0] + ' '  + str(onmt.OS_Constants.IEOS) + ' ' + lines[1]
             src_t = map(int, src_t.split(' '))
             src_t = torch.LongTensor(src_t)
 
