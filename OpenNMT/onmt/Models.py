@@ -222,8 +222,8 @@ class Generator(nn.Module):
 
     def sampler(self, input):
         noise = self.get_noise(input)
-        x = (input + noise) * self.real_temperature
-        # x = (input + noise) * self.temperature
+        # x = (input + noise) * self.real_temperature
+        x = (input + noise) * self.temperature
         return x.view_as(input)
 
     def forward(self, input, dec_hidden):
