@@ -16,7 +16,7 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
         self.word_lut = nn.Embedding(dicts.size(),
                                   opt.word_vec_size,
-                                  padding_idx=onmt.Constants.PAD)
+                                  padding_idx=onmt.OS_Constants.PAD)
         self.rnn = nn.LSTM(inputSize, self.hidden_size,
                         num_layers=opt.layers,
                         dropout=opt.dropout,
@@ -88,7 +88,7 @@ class Decoder(nn.Module):
         else:
             self.word_lut = nn.Embedding(dicts.size(),
                                          opt.word_vec_size,
-                                         padding_idx=onmt.Constants.PAD)
+                                         padding_idx=onmt.OS_Constants.PAD)
 
         self.rnn = StackedLSTM(opt.layers, input_size, opt.rnn_size, opt.dropout)
         self.attn = onmt.modules.GlobalAttention(opt.rnn_size)
@@ -127,10 +127,10 @@ class Decoder(nn.Module):
             outputs = torch.stack(outputs)
         else:
             if self.opt.st_conditioning:
-                emb_t = Variable(torch.LongTensor(1, self.opt.batch_size).zero_().fill_(onmt.Constants.BOS))
+                emb_t = Variable(torch.LongTensor(1, self.opt.batch_size).zero_().fill_(onmt.OS_Constants.BOS))
             else:
                 emb_t = torch.FloatTensor(self.opt.batch_size, self.dicts.size()).zero_()
-                emb_t[:, onmt.Constants.BOS] = 1
+                emb_t[:, onmt.OS_Constants.BOS] = 1
                 emb_t = Variable(emb_t)
 
             if self.opt.cuda:
@@ -155,7 +155,7 @@ class Decoder(nn.Module):
                 out_t = self.generator(output, hidden)
 
                 # Masking PAD
-                out_t.data[:,onmt.Constants.PAD] = 0
+                out_t.data[:,onmt.OS_Constants.PAD] = 0
                 out_t_sofmtmaxed = F.softmax(out_t)
 
                 if self.opt.st_conditioning:

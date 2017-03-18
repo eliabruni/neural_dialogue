@@ -164,7 +164,7 @@ if torch.cuda.is_available():
 
 def NMTCriterion(vocabSize):
     weight = torch.ones(vocabSize)
-    weight[onmt.Constants.PAD] = 0
+    weight[onmt.OS_Constants.PAD] = 0
     crit = nn.NLLLoss(weight, size_average=False)
     if opt.cuda:
         crit.cuda()
@@ -186,7 +186,7 @@ def eval(G, criterion, data, dataset):
         _, _, loss  = memoryEfficientLoss(G, outputs, sources, targets, dataset, criterion, False, False, True)
 
         total_loss += loss
-        total_words += targets.data.ne(onmt.Constants.PAD).sum()
+        total_words += targets.data.ne(onmt.OS_Constants.PAD).sum()
 
     G.train()
     if not opt.supervision:
@@ -258,14 +258,14 @@ def memoryEfficientLoss(G,H1,H2, outputs, sources, targets, dataset, criterion, 
             if opt.perturbe_real:
                 pert1 = G.generator.sampler(hallucination)
             # Masking PAD: we do it before softmax, as in generation
-            pert1.data[:, onmt.Constants.PAD] = 0
+            pert1.data[:, onmt.OS_Constants.PAD] = 0
             noise_targets = F.softmax(pert1)
 
             pert2 = inverse_hallucination
             if opt.perturbe_real:
                 pert2 = G.generator.sampler(inverse_hallucination)
             # Masking PAD: we do it before softmax, as in generation
-            pert2.data[:, onmt.Constants.PAD] = 0
+            pert2.data[:, onmt.OS_Constants.PAD] = 0
             noise_sources = F.softmax(pert2)
 
 
@@ -277,7 +277,7 @@ def memoryEfficientLoss(G,H1,H2, outputs, sources, targets, dataset, criterion, 
 
         # Adding ieos to sources before concatenating with targets
         ieos = torch.FloatTensor(opt.batch_size, dataset['dicts']['tgt'].size()).zero_()
-        ieos[:, onmt.Constants.EOS] = 1
+        ieos[:, onmt.OS_Constants.IEOS] = 1
         ieos = Variable(ieos)
         noise_sources = torch.cat([noise_sources, ieos], 0)
         if opt.cuda:
@@ -340,9 +340,9 @@ def log_predictions(pred_t, src_t, targ_t, distances, tgt_dict):
     argmax_preds_sorted = argmax_preds_sorted.astype(int)
     rand_idx = np.random.randint(len(argmax_preds_sorted))
     logger.debug('SAMPLE:')
-    logger.debug('source: ' + str(" ".join(tgt_dict.convertToLabels(argmax_sources[rand_idx], onmt.Constants.EOS))))
-    logger.debug('preds: ' + str(" ".join(tgt_dict.convertToLabels(argmax_preds_sorted[rand_idx], onmt.Constants.EOS))))
-    logger.debug('trgts: ' + str(" ".join(tgt_dict.convertToLabels(argmax_targets[rand_idx].astype(int), onmt.Constants.EOS))))
+    logger.debug('source: ' + str(" ".join(tgt_dict.convertToLabels(argmax_sources[rand_idx], onmt.OS_Constants.EOS))))
+    logger.debug('preds: ' + str(" ".join(tgt_dict.convertToLabels(argmax_preds_sorted[rand_idx], onmt.OS_Constants.EOS))))
+    logger.debug('trgts: ' + str(" ".join(tgt_dict.convertToLabels(argmax_targets[rand_idx].astype(int), onmt.OS_Constants.EOS))))
     distances.append(lev_dist(argmax_targets[rand_idx].astype(int), argmax_preds_sorted[rand_idx]))
     if len(distances) <= 10:
         avg_dist = np.mean(distances)
@@ -369,7 +369,7 @@ def one_hot(G, input, num_input_symbols):
         pert = G.generator.sampler(y_onehot)
 
         # Masking PAD: we do it before softmax, as in generation
-        pert.data[:, onmt.Constants.PAD] = 0
+        pert.data[:, onmt.OS_Constants.PAD] = 0
         pert = F.softmax(pert)
 
         one_hot_tensor[i] = pert.data
@@ -431,7 +431,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                 grad_norm = optimizerG.step()
                 report_loss += loss
                 total_loss += loss
-                num_words = targets.data.ne(onmt.Constants.PAD).sum()
+                num_words = targets.data.ne(onmt.OS_Constants.PAD).sum()
                 total_words += num_words
                 report_words += num_words
                 if i % opt.log_interval == 0 and i > 0:
@@ -463,7 +463,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
                         report_loss += loss
                         total_loss += loss
-                        num_words = targets.data.ne(onmt.Constants.PAD).sum()
+                        num_words = targets.data.ne(onmt.OS_Constants.PAD).sum()
                         total_words += num_words
                         report_words += num_words
 
@@ -484,8 +484,8 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         H2.zero_grad()
                         inverse_sources = batch[1][1:-1]
                         inverse_targets = batch[0]
-                        bos = torch.LongTensor(1, inverse_targets.size(1)).fill_(onmt.Constants.BOS)
-                        eos = torch.LongTensor(1, inverse_targets.size(1)).fill_(onmt.Constants.EOS)
+                        bos = torch.LongTensor(1, inverse_targets.size(1)).fill_(onmt.OS_Constants.BOS)
+                        eos = torch.LongTensor(1, inverse_targets.size(1)).fill_(onmt.OS_Constants.EOS)
                         if opt.cuda:
                             eos = eos.cuda()
                             bos = bos.cuda()
@@ -504,7 +504,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
                         report_loss += loss
                         total_loss += loss
-                        num_words = inverse_targets.data.ne(onmt.Constants.PAD).sum()
+                        num_words = inverse_targets.data.ne(onmt.OS_Constants.PAD).sum()
                         total_words += num_words
                         report_words += num_words
                         if i % opt.log_interval == 0 and i > 0 and j == 9:
