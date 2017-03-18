@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch.autograd import Variable
 import onmt.modules
 import torch.nn.functional as F
+import numpy as np
 
 class Encoder(nn.Module):
 
@@ -180,7 +181,7 @@ class Generator(nn.Module):
         self.dicts = dicts
         self.linear = nn.Linear(opt.rnn_size, dicts.size())
         self.temp_estimator = temp_estimator
-        self.tau0 = 3  # initial temperature
+        self.tau0 = 0.5  # initial temperature
         self.eps = 1e-20
         self.temperature = self.tau0
         self.real_temperature = self.tau0
@@ -221,8 +222,8 @@ class Generator(nn.Module):
 
     def sampler(self, input):
         noise = self.get_noise(input)
-        # x = (input + noise) * self.real_temperature
-        x = (input + noise) * self.temperature
+        x = (input + noise) * self.real_temperature
+        # x = (input + noise) * self.temperature
         return x.view_as(input)
 
     def forward(self, input, dec_hidden):

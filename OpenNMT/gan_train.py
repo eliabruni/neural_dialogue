@@ -299,7 +299,7 @@ def memoryEfficientLoss(G,H1,H2, outputs, sources, targets, dataset, criterion, 
             if fake_mode == 0:
                 fake = torch.cat([noise_sources, pred_t], 0)
 
-            # fake is real target with shuffled words
+            # fake is real target with shuffled words (shuffling done within each single target)
             elif fake_mode == 1:
                 dim0 = noise_targets.size(0)
                 dim1 = noise_targets.size(1)
