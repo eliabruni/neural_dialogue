@@ -310,7 +310,7 @@ class G(nn.Module):
             out = self.generator(out)
         return out
 
-class D2(nn.Module):
+class D(nn.Module):
     def __init__(self, opt, dicts):
         self.opt = opt
         self.vocab_size = dicts.size()
@@ -348,7 +348,7 @@ class D2(nn.Module):
         return out
 
 
-class D(nn.Module):
+class D2(nn.Module):
     def __init__(self, opt, dicts):
         self.opt = opt
         self.vocab_size = dicts.size()
