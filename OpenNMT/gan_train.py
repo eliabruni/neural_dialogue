@@ -301,10 +301,14 @@ def memoryEfficientLoss(G,H1,H2, outputs, sources, targets, dataset, criterion, 
 
             # fake is real target with shuffled words
             elif fake_mode == 1:
-                idxs = torch.LongTensor(torch.randperm(len(noise_targets)))
+                dim0 = noise_targets.size(0)
+                dim1 = noise_targets.size(1)
+                noise_targets = noise_targets.view(dim0/opt.batch_size,opt.batch_size,dim1)
+                idxs = torch.LongTensor(torch.randperm(dim0/opt.batch_size))
                 if opt.cuda:
                     idxs = idxs.cuda()
-                noise_targets.data = noise_targets.data[idxs]
+                noise_targets.data = noise_targets.data[idxs,:,:]
+                noise_targets = noise_targets.view(dim0, dim1)
                 fake = torch.cat([noise_sources, noise_targets], 0)
 
             # fake is real target with shuffled sentences
