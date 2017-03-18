@@ -314,10 +314,10 @@ class D(nn.Module):
     def __init__(self, opt, dicts):
         self.opt = opt
         self.vocab_size = dicts.size()
-        self.rnn_size = opt.D_rnn_size
+        self.rnn_size = opt.d_rnn_size
         super(D, self).__init__()
         self.onehot_embedding = nn.Linear(self.vocab_size, self.rnn_size)
-        self.rnn1 = nn.LSTM(self.rnn_size, self.rnn_size, 1, bidirectional=True)
+        self.rnn1 = nn.LSTM(self.rnn_size, self.rnn_size, 1, bidirectional=True,dropout=opt.d_dropout)
         self.attn = onmt.modules.GlobalAttention(self.rnn_size*2)
         self.l_out = nn.Linear(self.rnn_size * 2, 1)
         if not self.opt.wasser:

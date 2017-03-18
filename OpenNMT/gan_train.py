@@ -10,6 +10,7 @@ import torch.nn.functional as F
 # import numba
 import logging
 from torch import optim
+from numpy import random
 
 parser = argparse.ArgumentParser(description='gan_train.py')
 
@@ -45,6 +46,8 @@ parser.add_argument('-h_overfeat', type=int, default=10,
                     help='Overfeat the hallucinator on each batch')
 parser.add_argument('-g_train_interval', type=int, default=5,
                     help='After how many discriminator train iters to train the generator')
+parser.add_argument('-multi_fake', type=bool, default=False,
+                    help='Whether to use supervision')
 
 
 ## G options
@@ -78,9 +81,9 @@ parser.add_argument('-estimate_temp', type=bool, default=False,
                     help='Use automatic estimation of temperature annealing for gumbel')
 
 ## D options
-parser.add_argument('-D_rnn_size', type=int, default=100,
+parser.add_argument('-d_rnn_size', type=int, default=100,
                     help='D: Size fo LSTM hidden states')
-parser.add_argument('-D_dropout', type=float, default=0.3,
+parser.add_argument('-d_dropout', type=float, default=0.3,
                     help='Dropout probability; applied between LSTM stacks.')
 parser.add_argument('-d_layers', type=int, default=3,
                     help='Number of layers in the LSTM encoder/decoder')
@@ -282,13 +285,37 @@ def memoryEfficientLoss(G,H1,H2, outputs, sources, targets, dataset, criterion, 
         if opt.cuda:
             ieos = ieos.cuda()
         noise_sources = torch.cat([noise_sources, ieos], 0)
+
         if opt.cuda:
             noise_sources = noise_sources.cuda()
             noise_targets = noise_targets.cuda()
             pred_t = pred_t.cuda()
-
-        fake = torch.cat([noise_sources, pred_t], 0)
         real = torch.cat([noise_sources,noise_targets],0)
+
+        if opt.multi_fake:
+            fake_mode = random.randint(3)
+
+            # standard fake
+            if fake_mode == 0:
+                fake = torch.cat([noise_sources, pred_t], 0)
+
+            # fake is real target with shuffled words
+            elif fake_mode == 1:
+                idxs = torch.randperm(len(noise_targets))
+                noise_targets = noise_targets[idxs]
+                fake = torch.cat([noise_sources, noise_targets], 0)
+
+            # fake is real target with shuffled sentences
+            elif fake_mode == 2:
+                dim0 = noise_targets.size(0)
+                dim1 = noise_targets.size(1)
+                noise_targets = noise_targets.view(dim0/opt.batch_size,opt.batch_size,dim1)
+                idxs = torch.randperm(len(noise_targets))
+                noise_targets = noise_targets[idxs]
+                noise_targets = noise_targets.view(dim0, dim1)
+                fake = torch.cat([noise_sources, noise_targets], 0)
+        else:
+            fake = torch.cat([noise_sources, pred_t], 0)
 
     return fake, real, loss
 
@@ -533,6 +560,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
                     ###########################
                     D.zero_grad()
+
 
                     # train with real
                     D_real = D(real.detach())
