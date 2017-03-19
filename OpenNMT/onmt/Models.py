@@ -311,7 +311,7 @@ class G(nn.Module):
             out = self.generator(out)
         return out
 
-class D(nn.Module):
+class D2(nn.Module):
     def __init__(self, opt, dicts):
         self.opt = opt
         self.vocab_size = dicts.size()
@@ -349,11 +349,11 @@ class D(nn.Module):
         return out
 
 
-class D2(nn.Module):
+class D(nn.Module):
     def __init__(self, opt, dicts):
         self.opt = opt
         self.vocab_size = dicts.size()
-        self.rnn_size = opt.D_rnn_size
+        self.rnn_size = opt.d_rnn_size
         self.num_directions = 2 if opt.brnn else 1
         super(D, self).__init__()
         self.onehot_embedding = nn.Linear(self.vocab_size, self.rnn_size)
@@ -361,11 +361,6 @@ class D2(nn.Module):
                         num_layers=opt.d_layers,
                         dropout=opt.dropout,
                         bidirectional=opt.brnn)
-        self.rnn1 = nn.LSTM(self.rnn_size*self.num_directions, self.rnn_size,
-                            1,
-                            bidirectional=True,
-                            dropout=opt.dropout)
-        self.attn = onmt.modules.GlobalAttention(self.rnn_size*2)
         self.l_out = nn.Linear(self.rnn_size * 2, 1)
         if not self.opt.wasser:
             self.sigmoid = nn.Sigmoid()
@@ -380,23 +375,9 @@ class D2(nn.Module):
         h_0 = Variable(onehot_embeds.data.new(*h_size).zero_(), requires_grad=False)
         c_0 = Variable(onehot_embeds.data.new(*h_size).zero_(), requires_grad=False)
         hidden = (h_0, c_0)
-
-        _batch_size = onehot_embeds.size(1)
-        h = Variable(torch.zeros(1 * 2, _batch_size, self.rnn_size))
-        if self.opt.cuda:
-            h = h.cuda()
-        c = Variable(torch.zeros(1 * 2, _batch_size, self.rnn_size))
-        if self.opt.cuda:
-            c = c.cuda()
-
         onehot_embeds, hidden = self.rnn0(onehot_embeds, hidden)
-        outputs, (hn,_) = self.rnn1(onehot_embeds, hidden)
-        hn1 = hn.transpose(0, 1).contiguous().view(_batch_size, -1)
-        hn2 = torch.cat([hn[0], hn[1]], 1)
-        diff = (hn1 - hn2).norm().data[0]
-        assert diff == 0
-        out, attn = self.attn(hn2,torch.transpose(outputs,1,0))
-        out = self.l_out(out)
+
+        out = self.l_out(onehot_embeds.view(x.size()[0]* x.size()[1], onehot_embeds.size()[2]))
         if not self.opt.wasser:
             out = self.sigmoid(out)
         return out
