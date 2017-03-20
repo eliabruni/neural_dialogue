@@ -2,10 +2,11 @@ import torch
 
 
 class Dict(object):
-    def __init__(self, data=None):
+    def __init__(self, data=None, lower=False):
         self.idxToLabel = {}
         self.labelToIdx = {}
         self.frequencies = {}
+        self.lower = lower
 
         # Special entries will not be pruned.
         self.special = []
@@ -23,9 +24,14 @@ class Dict(object):
     def loadFile(self, filename):
         for line in open(filename):
             fields = line.split()
-            label = fields[0]
-            idx = int(fields[1])
+            if len(fields) == 2:
+                label = fields[0]
+                idx = int(fields[1])
+            else:
+                label = ' '
+                idx = fields[0]
             self.add(label, idx)
+
 
     # Write entries to a file.
     def writeFile(self, filename):
@@ -37,6 +43,7 @@ class Dict(object):
         file.close()
 
     def lookup(self, key, default=None):
+        key = key.lower() if self.lower else key
         try:
             return self.labelToIdx[key]
         except KeyError:
@@ -60,6 +67,7 @@ class Dict(object):
 
     # Add `label` in the dictionary. Use `idx` as its index if given.
     def add(self, label, idx=None):
+        label = label.lower() if self.lower else label
         if idx is not None:
             self.idxToLabel[idx] = label
             self.labelToIdx[label] = idx
@@ -89,6 +97,7 @@ class Dict(object):
         _, idx = torch.sort(freq, 0, True)
 
         newDict = Dict()
+        newDict.lower = self.lower
 
         # Add special entries in all cases.
         for i in self.special:

@@ -11,6 +11,8 @@ parser = argparse.ArgumentParser(description='preprocess.lua')
 ##
 
 parser.add_argument('-config',    help="Read options from this file")
+parser.add_argument('-os_data', type=bool, default=False,
+                    help='Whether to use opensubtitles dataset')
 
 parser.add_argument('-universal_file', required=True,
                     help="Path to the training source data")
@@ -40,8 +42,11 @@ parser.add_argument('-tgt_vocab',
                     help="Path to an existing target vocabulary")
 
 
-parser.add_argument('-seq_length', type=int, default=50,
+
+parser.add_argument('-seq_length', type=int, default=25,
                     help="Maximum sequence length")
+parser.add_argument('-min_seq_length', type=int, default=3,
+                    help="Minimum sequence length")
 parser.add_argument('-shuffle',    type=int, default=1,
                     help="Shuffle data")
 parser.add_argument('-seed',       type=int, default=3435,
@@ -96,6 +101,75 @@ def saveVocabulary(name, vocab, file):
     vocab.writeFile(file)
 
 
+def initOSvocabulary(name, vocabFile):
+    vocab = None
+    if vocabFile is not None:
+        # If given, load existing word dictionary.
+        print('Reading ' + name + ' vocabulary from \'' + vocabFile + '\'...')
+        vocab = onmt.Dict(None, True)
+        vocab.loadFile(vocabFile)
+        print('Loaded ' + vocab.size() + ' ' + name + ' words')
+    else:
+        print('Error: vocab file required.')
+
+    print()
+    return vocab
+
+def makeOSdata(srcFile):
+    src, tgt = [], []
+    sizes = []
+    count, ignored = 0, 0
+
+    print('Processing %s ...' % (srcFile))
+    srcF = open(srcFile)
+
+    while True:
+        lines = srcF.readline().split('|')
+
+        src_t = lines[0] + ' '  + onmt.Constants.IEOS + ' ' +  lines[1]
+        src_t = map(int, src_t.split(' '))
+        src_t = torch.LongTensor(src_t)
+
+        tgt_t = lines[2]
+        tgt_t = map(int, tgt_t.split(' '))
+        tgt_t = torch.LongTensor(tgt_t)
+
+        if len(src_t) <= opt.seq_length \
+                and len(src_t) >= opt.min_seq_length \
+                and len(tgt_t) <= opt.seq_length \
+                and len(tgt_t) >= opt.min_seq_length:
+            src += src_t
+            tgt += tgt_t
+
+            sizes += [len(src_t)]
+        else:
+            ignored += 1
+
+        count += 1
+
+        if count % opt.report_every == 0:
+            print('... %d sentences prepared' % count)
+
+    srcF.close()
+
+    if opt.shuffle == 1:
+        print('... shuffling sentences')
+        perm = torch.randperm(len(src))
+        src = [src[idx] for idx in perm]
+        tgt = [tgt[idx] for idx in perm]
+        sizes = [sizes[idx] for idx in perm]
+
+    print('... sorting sentences by size')
+    _, perm = torch.sort(torch.Tensor(sizes))
+    src = [src[idx] for idx in perm]
+    tgt = [tgt[idx] for idx in perm]
+
+    print('Prepared %d sentences (%d ignored due to length == 0 or > %d)' %
+          (len(src), ignored, opt.seq_length))
+
+    return src, tgt
+
+
 def makeData(srcFile, tgtFile, srcDicts, tgtDicts):
     src, tgt = [], []
     sizes = []
@@ -114,11 +188,14 @@ def makeData(srcFile, tgtFile, srcDicts, tgtDicts):
                 print('WARNING: source and target do not have the same number of sentences')
             break
 
-        if len(srcWords) <= opt.seq_length and len(tgtWords) <= opt.seq_length:
+        if len(srcWords) <= opt.seq_length \
+                and len(srcWords) >= opt.min_seq_length \
+                and len(tgtWords) <= opt.seq_length \
+                and len(tgtWords) >= opt.min_seq_length:
 
             src += [srcDicts.convertToIdx(srcWords,
                                           onmt.Constants.UNK_WORD)]
-            tgt += [tgtDicts.convertToIdx(tgtWords,
+            tgt += [srcDicts.convertToIdx(tgtWords,
                                           onmt.Constants.UNK_WORD,
                                           onmt.Constants.BOS_WORD,
                                           onmt.Constants.EOS_WORD)]
@@ -155,35 +232,62 @@ def makeData(srcFile, tgtFile, srcDicts, tgtDicts):
 
 def main():
 
-    dicts = {}
-    dicts['src'] = initVocabulary('source', opt.universal_file, opt.universal_vocab,
-                                  opt.universal_vocab_size)
+    if opt.os_data:
+        dicts = {}
+        dicts['src'] = initOSvocabulary('source', opt.universal_vocab)
+        dicts['tgt'] = dicts['src']
 
-    dicts['tgt'] = dicts['src']
-    # dicts['tgt'] = initVocabulary('target', opt.train_tgt, opt.tgt_vocab,
-    #                               opt.tgt_vocab_size)
+        print('Preparing training ...')
+        train = {}
+        train['src'], train['tgt'] = makeOSdata(opt.train_src)
 
-    print('Preparing training ...')
-    train = {}
-    train['src'], train['tgt'] = makeData(opt.train_src, opt.train_tgt,
-                                          dicts['src'], dicts['tgt'])
+        print('Preparing validation ...')
+        valid = {}
+        valid['src'], valid['tgt'] = makeOSdata(opt.valid_src)
 
-    print('Preparing validation ...')
-    valid = {}
-    valid['src'], valid['tgt'] = makeData(opt.valid_src, opt.valid_tgt,
-                                    dicts['src'], dicts['tgt'])
-
-    if opt.src_vocab is None:
-        saveVocabulary('source', dicts['src'], opt.save_data + '.src.dict')
-    if opt.tgt_vocab is None:
-        saveVocabulary('target', dicts['tgt'], opt.save_data + '.tgt.dict')
+        if opt.src_vocab is None:
+            saveVocabulary('source', dicts['src'], opt.save_data + '.src.dict')
+        if opt.tgt_vocab is None:
+            saveVocabulary('target', dicts['tgt'], opt.save_data + '.tgt.dict')
 
 
-    print('Saving data to \'' + opt.save_data + '-train.pt\'...')
-    save_data = {'dicts': dicts,
-                 'train': train,
-                 'valid': valid}
-    torch.save(save_data, opt.save_data + '-train.pt')
+        print('Saving data to \'' + opt.save_data + '-train.pt\'...')
+        save_data = {'dicts': dicts,
+                     'train': train,
+                     'valid': valid}
+        torch.save(save_data, opt.save_data + '-train.pt')
+
+
+    else:
+        dicts = {}
+        dicts['src'] = initVocabulary('source', opt.universal_file, opt.universal_vocab,
+                                      opt.universal_vocab_size)
+
+        dicts['tgt'] = dicts['src']
+        # dicts['tgt'] = initVocabulary('target', opt.train_tgt, opt.tgt_vocab,
+        #                               opt.tgt_vocab_size)
+
+        print('Preparing training ...')
+        train = {}
+        train['src'], train['tgt'] = makeData(opt.train_src, opt.train_tgt,
+                                              dicts['src'], dicts['tgt'])
+
+        print('Preparing validation ...')
+        valid = {}
+        valid['src'], valid['tgt'] = makeData(opt.valid_src, opt.valid_tgt,
+                                        dicts['src'], dicts['tgt'])
+
+        if opt.src_vocab is None:
+            saveVocabulary('source', dicts['src'], opt.save_data + '.src.dict')
+        if opt.tgt_vocab is None:
+            saveVocabulary('target', dicts['tgt'], opt.save_data + '.tgt.dict')
+
+
+        print('Saving data to \'' + opt.save_data + '-train.pt\'...')
+        save_data = {'dicts': dicts,
+                     'train': train,
+                     'valid': valid}
+        torch.save(save_data, opt.save_data + '-train.pt')
 
 
 if __name__ == "__main__":

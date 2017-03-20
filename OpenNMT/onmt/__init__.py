@@ -1,6 +1,7 @@
 import onmt.Constants
+import onmt.OS_Constants
 import onmt.Models
-import onmt.Models_exp
+import onmt.Hallucinator
 from onmt.Translator import Translator
 from onmt.Dataset import Dataset
 from onmt.Optim import Optim

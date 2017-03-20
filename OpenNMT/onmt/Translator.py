@@ -1,6 +1,7 @@
 import onmt
 import torch
 from torch.autograd import Variable
+import torch.nn.functional as F
 
 
 class Translator(object):
@@ -48,7 +49,7 @@ class Translator(object):
 
     def translateBatch(self, batch):
         srcBatch, tgtBatch = batch
-        batchSize = srcBatch.size(0)
+        batchSize = srcBatch.size(1)
         beamSize = self.opt.beam_size
 
         #  (1) run the encoder on the src
@@ -56,45 +57,48 @@ class Translator(object):
         # have to execute the encoder manually to deal with padding
         encStates = None
         context = []
-        for srcBatch_t in srcBatch.chunk(srcBatch.size(1), dim=1):
+        for srcBatch_t in srcBatch.chunk(srcBatch.size(0)):
             encStates, context_t = self.model.encoder(srcBatch_t, hidden=encStates)
-            batchPadIdx = srcBatch_t.data.squeeze(1).eq(onmt.Constants.PAD).nonzero()
+            batchPadIdx = srcBatch_t.data.squeeze(0).eq(onmt.Constants.PAD).nonzero()
             if batchPadIdx.nelement() > 0:
                 batchPadIdx = batchPadIdx.squeeze(1)
                 encStates[0].data.index_fill_(1, batchPadIdx, 0)
                 encStates[1].data.index_fill_(1, batchPadIdx, 0)
             context += [context_t]
 
-        encStates = (self.model._fix_enc_hidden(encStates[0]),
-                      self.model._fix_enc_hidden(encStates[1]))
-
         context = torch.cat(context)
         rnnSize = context.size(2)
 
         #  This mask is applied to the attention model inside the decoder
         #  so that the attention ignores source padding
-        padMask = srcBatch.data.eq(onmt.Constants.PAD)
+        padMask = srcBatch.data.eq(onmt.Constants.PAD).t()
         def applyContextMask(m):
             if isinstance(m, onmt.modules.GlobalAttention):
                 m.applyMask(padMask)
 
         #  (2) if a target is specified, compute the 'goldScore'
         #  (i.e. log likelihood) of the target under the model
+        # goldScores = context.data.new(batchSize).zero_()
         goldScores = context.data.new(batchSize).zero_()
-        if tgtBatch is not None:
-            decStates = encStates
-            decOut = self.model.make_init_decoder_output(context)
-            self.model.decoder.apply(applyContextMask)
-            initOutput = self.model.make_init_decoder_output(context)
-
-            decOut, decStates, attn = self.model.decoder(
-                    tgtBatch[:, :-1], decStates, context, initOutput)
-            for dec_t, tgt_t in zip(decOut.transpose(0, 1), tgtBatch.transpose(0, 1)[1:].data):
-                gen_t = self.model.generator.forward(dec_t)
-                tgt_t = tgt_t.unsqueeze(1)
-                scores = gen_t.data.gather(1, tgt_t)
-                scores.masked_fill_(tgt_t.eq(onmt.Constants.PAD), 0)
-                goldScores += scores
+        # if tgtBatch is not None:
+        #     decStates = encStates
+        #     decOut = self.model.make_init_decoder_output(context)
+        #     self.model.decoder.apply(applyContextMask)
+        #     initOutput = self.model.make_init_decoder_output(context)
+        #
+        #     decOut, decStates, attn = self.model.decoder(
+        #         tgtBatch[:-1], decStates, context, initOutput)
+        #     for dec_t, tgt_t in zip(decOut, tgtBatch[1:].data):
+        #         print('dec_t: ' + str(dec_t))
+        #         print('tgt_t: ' + str(tgt_t))
+        #         print('decOut: ' + str(decOut))
+        #         print('tgtBatch[1:].data: ' + str(tgtBatch[1:].data))
+        #         gen_t = self.model.generator.forward(dec_t, decStates)
+        #         gen_t = F.softmax(gen_t)
+        #         tgt_t = tgt_t.unsqueeze(1)
+        #         scores = gen_t.data.gather(1, tgt_t)
+        #         scores.masked_fill_(tgt_t.eq(onmt.Constants.PAD), 0)
+        #         goldScores += scores
 
         #  (3) run the decoder to generate sentences, using beam search
 
@@ -107,7 +111,7 @@ class Translator(object):
 
         decOut = self.model.make_init_decoder_output(context)
 
-        padMask = srcBatch.data.eq(onmt.Constants.PAD).unsqueeze(0).repeat(beamSize, 1, 1)
+        padMask = srcBatch.data.eq(onmt.Constants.PAD).t().unsqueeze(0).repeat(beamSize, 1, 1)
 
         batchIdx = list(range(batchSize))
         remainingSents = batchSize
@@ -120,10 +124,11 @@ class Translator(object):
                                if not b.done]).t().contiguous().view(1, -1)
 
             decOut, decStates, attn = self.model.decoder(
-                Variable(input).transpose(0, 1), decStates, context, decOut)
+                Variable(input), decStates, context, decOut)
             # decOut: 1 x (beam*batch) x numWords
-            decOut = decOut.transpose(0, 1).squeeze(0)
-            out = self.model.generator.forward(decOut)
+            decOut = decOut.squeeze(0)
+            out = self.model.generator.forward(decOut, decStates)
+            gen_t = F.softmax(gen_t)
 
             # batch x beam x numWords
             wordLk = out.view(beamSize, remainingSents, -1).transpose(0, 1).contiguous()
@@ -177,7 +182,7 @@ class Translator(object):
             scores, ks = beam[b].sortBest()
 
             allScores += [scores[:n_best]]
-            valid_attn = srcBatch.transpose(0, 1).data[:, b].ne(onmt.Constants.PAD).nonzero().squeeze(1)
+            valid_attn = srcBatch.data[:, b].ne(onmt.Constants.PAD).nonzero().squeeze(1)
             hyps, attn = zip(*[beam[b].getHyp(k) for k in ks[:n_best]])
             attn = [a.index_select(1, valid_attn) for a in attn]
             allHyp += [hyps]
@@ -189,14 +194,13 @@ class Translator(object):
         #  (1) convert words to indexes
         dataset = self.buildData(srcBatch, goldBatch)
         batch = dataset[0]
-        batch = [x.transpose(0, 1) for x in batch]
 
         #  (2) translate
         pred, predScore, attn, goldScore = self.translateBatch(batch)
 
         #  (3) convert indexes to words
         predBatch = []
-        for b in range(batch[0].size(0)):
+        for b in range(batch[0].size(1)):
             predBatch.append(
                 [self.buildTargetTokens(pred[b][n], srcBatch[b], attn[b][n])
                         for n in range(self.opt.n_best)]
