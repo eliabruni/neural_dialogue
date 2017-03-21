@@ -7,6 +7,7 @@ import numpy as np
 class H_Encoder(nn.Module):
 
     def __init__(self, opt, dicts):
+        self.opt = opt
         self.layers = opt.layers
         self.num_directions = 2 if opt.brnn else 1
         assert opt.rnn_size % self.num_directions == 0
@@ -33,6 +34,7 @@ class H_Encoder(nn.Module):
 
     def forward(self, input, hidden=None):
         emb = self.word_lut(input)
+        emb = emb.contiguous().view(emb.size(0)/self.opt.batch_size, self.opt.batch_size, emb.size(1))
 
         if hidden is None:
             batch_size = emb.size(1)
@@ -40,13 +42,13 @@ class H_Encoder(nn.Module):
             h_0 = Variable(emb.data.new(*h_size).zero_(), requires_grad=False)
             c_0 = Variable(emb.data.new(*h_size).zero_(), requires_grad=False)
             hidden = (h_0, c_0)
-
         outputs, hidden_t = self.rnn(emb, hidden)
         return hidden_t, outputs
 
 
 class StackedLSTM(nn.Module):
-    def __init__(self, num_layers, input_size, rnn_size, dropout):
+    def __init__(self, opt, num_layers, input_size, rnn_size, dropout):
+        self.opt = opt
         super(StackedLSTM, self).__init__()
         self.dropout = nn.Dropout(dropout)
 
@@ -77,6 +79,7 @@ class StackedLSTM(nn.Module):
 class H_Decoder(nn.Module):
 
     def __init__(self, opt, dicts):
+        self.opt = opt
         self.layers = opt.layers
         self.input_feed = opt.input_feed
         input_size = opt.word_vec_size
@@ -84,10 +87,12 @@ class H_Decoder(nn.Module):
             input_size += opt.rnn_size
 
         super(H_Decoder, self).__init__()
-        self.word_lut = nn.Embedding(dicts.size(),
-                                  opt.word_vec_size,
-                                  padding_idx=onmt.Constants.PAD)
-        self.rnn = StackedLSTM(opt.layers, input_size, opt.rnn_size, opt.dropout)
+        # self.word_lut = nn.Embedding(dicts.size(),
+        #                           opt.word_vec_size,
+        #                           padding_idx=onmt.Constants.PAD)
+        self.word_lut = nn.Linear(dicts.size(),
+                                  opt.word_vec_size)
+        self.rnn = StackedLSTM(opt, opt.layers, input_size, opt.rnn_size, opt.dropout)
         self.attn = onmt.modules.GlobalAttention(opt.rnn_size)
         self.dropout = nn.Dropout(opt.dropout)
 
@@ -103,6 +108,8 @@ class H_Decoder(nn.Module):
 
     def forward(self, input, hidden, context, init_output):
         emb = self.word_lut(input)
+        emb = emb.contiguous().view(emb.size(0) / self.opt.batch_size, self.opt.batch_size, emb.size(1))
+
 
         batch_size = input.size(1)
 
@@ -160,7 +167,8 @@ class Hallucinator(nn.Module):
 
     def forward(self, input):
         src = input[0]
-        tgt = input[1][:-1]  # exclude last target from inputs
+        tgt = input[1]  # exclude last target from inputs
+
         enc_hidden, context = self.encoder(src)
         init_output = self.make_init_decoder_output(context)
 
@@ -168,7 +176,7 @@ class Hallucinator(nn.Module):
                       self._fix_enc_hidden(enc_hidden[1]))
 
         out, dec_hidden, _attn = self.decoder(tgt, enc_hidden, context, init_output)
-        if self.generate:
-            out = self.generator(out)
+        out = out.view(-1, out.size(2))
+        out = self.generator(out)
 
         return out

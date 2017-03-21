@@ -48,6 +48,8 @@ parser.add_argument('-g_train_interval', type=int, default=2,
                     help='After how many discriminator train iters to train the generator')
 parser.add_argument('-multi_fake', type=bool, default=False,
                     help='Whether to use supervision')
+parser.add_argument('-crazy', type=bool, default=False,
+                    help='Whether to use supervision')
 
 
 ## G options
@@ -223,6 +225,7 @@ def memoryEfficientLoss(G,H1,H2, outputs, sources, targets, dataset, criterion, 
 
     loss = 0
     fake, real = None, None
+    fake_mode = 0
 
     if eval:
         pred_t = F.log_softmax(outputs)
@@ -291,6 +294,8 @@ def memoryEfficientLoss(G,H1,H2, outputs, sources, targets, dataset, criterion, 
             noise_targets = noise_targets.cuda()
             pred_t = pred_t.cuda()
         real = torch.cat([noise_sources,noise_targets],0)
+
+
 
         if opt.multi_fake:
             fake_mode = random.randint(3)
@@ -437,6 +442,8 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None,
     # define criterion of each GPU
     criterion = nn.BCELoss()
 
+    crazy_criterion = nn.MSELoss()
+
     cxt_criterion = NMTCriterion(dataset['dicts']['tgt'].size())
 
     # GAN variables
@@ -567,12 +574,58 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None,
                 real = real.contiguous().view(real.size()[0]/opt.batch_size,opt.batch_size,real.size()[1])
 
                 if opt.crazy:
-                    real_batch = (inverse_hallucination,hallucination)
+
+                    G.zero_grad()
+                    CRAZY.zero_grad()
+
+                    pert1 = hallucination
+                    if opt.perturbe_real:
+                        pert1 = G.generator.sampler(hallucination)
+                    # Masking PAD: we do it before softmax, as in generation
+                    pert1.data[:, onmt.Constants.PAD] = 0
+
+                    hallucination = F.softmax(pert1)
+
+                    pert2 = inverse_hallucination
+
+                    if opt.perturbe_real:
+                        pert2 = G.generator.sampler(inverse_hallucination)
+                    # Masking PAD: we do it before softmax, as in generation
+                    pert2.data[:, onmt.Constants.PAD] = 0
+                    inverse_hallucination = F.softmax(pert2)
+
                     pred_t = F.softmax(outputs)
+                    real_batch = (inverse_hallucination,hallucination)
+
                     fake_batch = (inverse_hallucination,pred_t)
+                    D_real = CRAZY(real_batch)
+                    D_x = D_real.data.mean()
+                    D_fake = CRAZY(fake_batch)
+                    D_G_z1 = D_fake.data.mean()
+                    D_G_z2 = D_G_z1
+
+                    hallucination = Variable(hallucination.data, requires_grad=False)
+                    D_fake = Variable(D_fake.data, requires_grad=False)
+
+                    errD = crazy_criterion(D_real, hallucination)
+                    errD.backward()
+                    errG = crazy_criterion(pred_t, D_fake)
+                    errG.backward()
+
+                    # print('ITERATION: ')
+                    # for p in CRAZY.parameters():
+                    #     print('p.grad.data: ' + str(p.grad.data))
+
+                    # print('ITERATION: ')
+                    # for p in G.parameters():
+                    #     print('p.grad.data: ' + str(p.grad.data))
+
+                    optimizerCRAZY.step()
+                    optimizerG.step()
 
 
                 elif opt.wasser:
+
                     ############################
                     # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
                     ###########################
@@ -616,6 +669,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None,
                         optimizerG.step()
 
                 else:
+
                     ############################
                     # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
                     ###########################
