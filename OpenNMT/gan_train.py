@@ -51,9 +51,9 @@ parser.add_argument('-crazy', type=bool, default=False,
 ## G options
 parser.add_argument('-layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
-parser.add_argument('-rnn_size', type=int, default=20,
+parser.add_argument('-rnn_size', type=int, default=100,
                     help='Size of LSTM hidden states')
-parser.add_argument('-word_vec_size', type=int, default=20,
+parser.add_argument('-word_vec_size', type=int, default=100,
                     help='Word embedding sizes')
 parser.add_argument('-input_feed', type=int, default=0,
                     help="""Feed the context vector at each time step as
@@ -112,7 +112,7 @@ parser.add_argument('-param_init', type=float, default=0.1,
 parser.add_argument('-optim', default='sgd',
                     help="Optimization method. [sgd|adagrad|adadelta|adam]")
 parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
-parser.add_argument('-learning_rate', type=float, default=2e-4,
+parser.add_argument('-learning_rate', type=float, default=2e-3,
                     help="""Starting learning rate. If adagrad/adadelta/adam is
                     used, then this is the global learning rate. Recommended
                     settings: sgd = 1, adagrad = 0.1, adadelta = 1, adam = 0.1""")
@@ -281,7 +281,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, H1=None, H2=None,
         CRAZY.train()
 
 
-    crazy_criterion = nn.MSELoss()
+    crazy_criterion = nn.L1Loss()
 
     cxt_criterion = NMTCriterion(dataset['dicts']['tgt'].size())
 
@@ -370,7 +370,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, H1=None, H2=None,
                     num_words = inverse_targets.data.ne(onmt.Constants.PAD).sum()
                     total_words += num_words
                     report_words += num_words
-                    if i % opt.log_interval == 0 and i > 0 and j == 9:
+                    if i % opt.log_interval == 0 and i > 0 and j == opt.h_overfeat-1:
                         logger.debug("Epoch %2d, %5d/%5d batches; perplexity: %6.2f; %3.0f tokens/s\n'" %
                               (epoch, i, len(trainData),
                                math.exp(report_loss / report_words),
@@ -403,42 +403,57 @@ def trainModel(G, trainData, validData, dataset, optimizerG, H1=None, H2=None,
             pert2.data[:, onmt.Constants.PAD] = 0
             inverse_hallucination = F.softmax(pert2)
 
+            inverse_hallucination = Variable(inverse_hallucination.data, requires_grad=False)
+
             real_batch = (hallucination, inverse_hallucination.detach())
 
             D_real = CRAZY(real_batch)
             D_x = D_real.data.mean()
 
 
-            inverse_hallucination = Variable(inverse_hallucination.data, requires_grad=False)
-
             errD = crazy_criterion(D_real, inverse_hallucination)
-
             errD.backward()
+
             # print('ITERATION: ')
             # for p in CRAZY.parameters():
             #     print('p.grad.data: ' + str(p.grad.data))
             optimizerCRAZY.step()
 
-
-
             G.zero_grad()
             pred_t = F.softmax(outputs)
-            fake_batch = (pred_t, inverse_hallucination)
+            fake_batch = (pred_t, inverse_hallucination.detach())
             D_fake = CRAZY(fake_batch)
+
+            # logger.debug("[CRAZY]:")
+            #
+            # argmax_dfake_sorted = get_crazy_argmax(D_fake)
+            # argmax_inverse_hallucination_sorted = get_crazy_argmax(inverse_hallucination)
+            # argmax_preds_sorted = get_crazy_argmax(pred_t)
+            # rand_idx = np.random.randint(len(argmax_preds_sorted))
+            #
+            # logger.debug('SAMPLE:')
+            # logger.debug(
+            #     'preds: ' + str(" ".join(dataset['dicts']['tgt'].convertToLabels(argmax_preds_sorted[rand_idx], onmt.Constants.EOS))))
+            # logger.debug(
+            #     'dfake: ' + str(" ".join(dataset['dicts']['tgt'].convertToLabels(argmax_dfake_sorted[rand_idx], onmt.Constants.EOS))))
+            # logger.debug(
+            #     'inverse: ' + str(" ".join(dataset['dicts']['tgt'].convertToLabels(argmax_inverse_hallucination_sorted[rand_idx], onmt.Constants.EOS))))
+
+            # log(CRAZY, D_fake, pred_t, inverse_hallucination, dataset)
+
+
             D_G_z1 = D_fake.data.mean()
             D_G_z2 = D_G_z1
-
             errG = crazy_criterion(D_fake, inverse_hallucination)
-            errG.backward()
 
+            print('errG: ' + str(errG.data))
+            print('errD: ' + str(errD.data))
+            errG.backward()
 
             # print('ITERATION: ')
             # for p in G.parameters():
             #     print('p.grad.data: ' + str(p.grad.data))
-
-
             optimizerG.step()
-
 
             # anneal tau for gumbel
             if opt.use_gumbel and opt.gumbel_anneal_interval > 0 and not opt.estimate_temp and i % opt.gumbel_anneal_interval == 0 and i > 0:
@@ -454,6 +469,18 @@ def trainModel(G, trainData, validData, dataset, optimizerG, H1=None, H2=None,
             G.iter_cnt+=1
 
         return 0
+
+    def get_crazy_argmax(pred_t):
+        pred_t_data = pred_t.data.cpu().numpy()
+        argmaxed_preds = np.argmax(pred_t_data, axis=1)
+        argmax_preds_sorted = np.ones((opt.batch_size, argmaxed_preds.size / opt.batch_size))
+        cnt = 0
+        for i in range(0, argmaxed_preds.size, opt.batch_size):
+            for j in range(opt.batch_size):
+                argmax_preds_sorted[j][cnt] = argmaxed_preds[i + j]
+            cnt += 1
+        argmax_preds_sorted = argmax_preds_sorted.astype(int)
+        return argmax_preds_sorted
 
     for epoch in range(opt.start_epoch, opt.epochs + 1):
 
@@ -528,11 +555,11 @@ def main():
 
                 for p in H1.parameters():
                     p.data.uniform_(-opt.param_init, opt.param_init)
-                optimizerH1 = optim.Adam(H1.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
+                optimizerH1 = optim.Adam(H1.parameters(), lr=2e-2, betas=(opt.beta1, 0.999))
 
                 for p in H2.parameters():
                     p.data.uniform_(-opt.param_init, opt.param_init)
-                optimizerH2 = optim.Adam(H2.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
+                optimizerH2 = optim.Adam(H2.parameters(), lr=2e-2, betas=(opt.beta1, 0.999))
 
             generator = onmt.Models.Generator(opt, dicts['tgt'], temp_estimator)
             decoder = onmt.Models.Decoder(opt, dicts['tgt'], generator)
