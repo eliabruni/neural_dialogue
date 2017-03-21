@@ -126,6 +126,7 @@ class H_Decoder(nn.Module):
             if self.input_feed:
                 emb_t = torch.cat([emb_t, output], 1)
 
+            emb_t=output
             output, hidden = self.rnn(emb_t, hidden)
             output, attn = self.attn(output, context.t())
             output = self.dropout(output)

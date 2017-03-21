@@ -281,7 +281,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, H1=None, H2=None,
         CRAZY.train()
 
 
-    crazy_criterion = nn.L1Loss()
+    crazy_criterion = nn.MSELoss()
 
     cxt_criterion = NMTCriterion(dataset['dicts']['tgt'].size())
 
@@ -385,7 +385,9 @@ def trainModel(G, trainData, validData, dataset, optimizerG, H1=None, H2=None,
                 logger.debug("[GENERATOR]:")
                 log(G, outputs, sources, targets, dataset)
 
-            CRAZY.zero_grad()
+
+
+
 
             pert1 = hallucination
             if opt.perturbe_real:
@@ -405,7 +407,34 @@ def trainModel(G, trainData, validData, dataset, optimizerG, H1=None, H2=None,
 
             inverse_hallucination = Variable(inverse_hallucination.data, requires_grad=False)
 
-            real_batch = (hallucination, inverse_hallucination.detach())
+            # LEARNING FAKE
+
+            G.zero_grad()
+            pred_t = F.softmax(outputs)
+            fake_batch = (pred_t, inverse_hallucination.detach())
+            D_fake = CRAZY(fake_batch)
+
+            D_G_z1 = D_fake.data.mean()
+            D_G_z2 = D_G_z1
+            errG = crazy_criterion(D_fake, inverse_hallucination)
+
+
+            errG.backward()
+
+            # print('ITERATION: ')
+            # for p in G.parameters():
+            #     print('p.grad.data: ' + str(p.grad.data))
+            optimizerG.step()
+
+
+            # LEARNING REAL
+
+
+            CRAZY.zero_grad()
+
+
+
+            real_batch = (hallucination.detach(), inverse_hallucination.detach())
 
             D_real = CRAZY(real_batch)
             D_x = D_real.data.mean()
@@ -419,44 +448,34 @@ def trainModel(G, trainData, validData, dataset, optimizerG, H1=None, H2=None,
             #     print('p.grad.data: ' + str(p.grad.data))
             optimizerCRAZY.step()
 
-            G.zero_grad()
-            pred_t = F.softmax(outputs)
-            fake_batch = (pred_t, inverse_hallucination.detach())
-            D_fake = CRAZY(fake_batch)
-
-            D_G_z1 = D_fake.data.mean()
-            D_G_z2 = D_G_z1
-            errG = crazy_criterion(D_fake, inverse_hallucination)
-
-            # print('errG: ' + str(errG.data))
-            # print('errD: ' + str(errD.data))
-            errG.backward()
-
             # logger.debug("[CRAZY]:")
             #
             # argmax_preds_sorted = get_crazy_argmax(pred_t)
+            # argmax_hallucination_sorted = get_crazy_argmax(hallucination)
+            #
             # argmax_dfake_sorted = get_crazy_argmax(D_fake)
             # argmax_inverse_hallucination_sorted = get_crazy_argmax(inverse_hallucination)
             #
             # rand_idx = np.random.randint(len(argmax_preds_sorted))
             #
             # logger.debug('SAMPLE:')
+            #
             # logger.debug(
             #     'generated targets:    ' + str(" ".join(dataset['dicts']['tgt'].convertToLabels(argmax_preds_sorted[rand_idx], onmt.Constants.EOS))))
+            # logger.debug(
+            #     'hallucinated targets:    ' + str(" ".join(
+            #         dataset['dicts']['tgt'].convertToLabels(argmax_hallucination_sorted[rand_idx], onmt.Constants.EOS))))
             # logger.debug(
             #     'generated sources:    ' + str(" ".join(dataset['dicts']['tgt'].convertToLabels(argmax_dfake_sorted[rand_idx], onmt.Constants.EOS))))
             # logger.debug(
             #     'hallucinated sources: ' + str(" ".join(dataset['dicts']['tgt'].convertToLabels(argmax_inverse_hallucination_sorted[rand_idx], onmt.Constants.EOS))))
+            #
+            #
+            # print('errG: ' + str(errG.data))
+            # print('errD: ' + str(errD.data))
 
-            # log(CRAZY, D_fake, pred_t, inverse_hallucination, dataset)
 
 
-
-
-            # print('ITERATION: ')
-            # for p in G.parameters():
-            #     print('p.grad.data: ' + str(p.grad.data))
-            optimizerG.step()
 
             # anneal tau for gumbel
             if opt.use_gumbel and opt.gumbel_anneal_interval > 0 and not opt.estimate_temp and i % opt.gumbel_anneal_interval == 0 and i > 0:
@@ -559,10 +578,12 @@ def main():
                 for p in H1.parameters():
                     p.data.uniform_(-opt.param_init, opt.param_init)
                 optimizerH1 = optim.Adam(H1.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
+                # optimizerH1 = optim.Adam(H1.parameters(), lr=2e-2, betas=(opt.beta1, 0.999))
 
                 for p in H2.parameters():
                     p.data.uniform_(-opt.param_init, opt.param_init)
                 optimizerH2 = optim.Adam(H2.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
+                # optimizerH2 = optim.Adam(H2.parameters(), lr=2e-2, betas=(opt.beta1, 0.999))
 
             generator = onmt.Models.Generator(opt, dicts['tgt'], temp_estimator)
             decoder = onmt.Models.Decoder(opt, dicts['tgt'], generator)
