@@ -446,8 +446,8 @@ def trainModel(G, trainData, validData, dataset, optimizerG, H1=None, H2=None,
             D_G_z2 = D_G_z1
             errG = crazy_criterion(D_fake, inverse_hallucination)
 
-            print('errG: ' + str(errG.data))
-            print('errD: ' + str(errD.data))
+            # print('errG: ' + str(errG.data))
+            # print('errD: ' + str(errD.data))
             errG.backward()
 
             # print('ITERATION: ')
