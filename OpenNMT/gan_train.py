@@ -424,7 +424,10 @@ def clip_gradient(opt, model):
     totalnorm = math.sqrt(totalnorm)
     return min(1, opt.clip / (totalnorm + 1e-6))
 
-def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=None, H1=None, H2=None, H_crit=None, optimizerH1=None, optimizerH2=None):
+def trainModel(G, trainData, validData, dataset, optimizerG, D=None,
+               optimizerD=None, H1=None, H2=None,
+               H_crit=None, optimizerH1=None, optimizerH2=None,
+               CRAZY=None, optimizerCRAZY=None):
     logger.info(G)
     G.train()
     if not opt.supervision:
@@ -558,12 +561,18 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                 if log_pred:
                     logger.debug("[GENERATOR]:")
                 fake,fake_mode, real, _= memoryEfficientLoss(
-                    G,H1,H2, outputs, sources, targets, dataset, None, hallucination, inverse_hallucination, log_pred)
+                    G, H1, H2, outputs, sources, targets, dataset, None, hallucination, inverse_hallucination, log_pred)
 
                 fake = fake.contiguous().view(fake.size()[0]/opt.batch_size,opt.batch_size,fake.size()[1])
                 real = real.contiguous().view(real.size()[0]/opt.batch_size,opt.batch_size,real.size()[1])
 
-                if opt.wasser:
+                if opt.crazy:
+                    real_batch = (inverse_hallucination,hallucination)
+                    pred_t = F.softmax(outputs)
+                    fake_batch = (inverse_hallucination,pred_t)
+
+
+                elif opt.wasser:
                     ############################
                     # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
                     ###########################
@@ -758,6 +767,14 @@ def main():
             generator = onmt.Models.Generator(opt, dicts['tgt'], temp_estimator)
             decoder = onmt.Models.Decoder(opt, dicts['tgt'], generator)
 
+            if opt.crazy:
+                h_encoder = onmt.S2SDisc.H_Encoder(opt, dicts['src'])
+                h_decoder = onmt.S2SDisc.H_Decoder(opt, dicts['tgt'])
+                h_generator = nn.Sequential(
+                    nn.Linear(opt.rnn_size, dicts['tgt'].size()))
+                CRAZY = onmt.S2SDisc.Hallucinator(opt, h_encoder, h_decoder, h_generator)
+                optimizerCRAZY = optim.Adam(CRAZY.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
+
 
 
         G = onmt.Models.G(opt, encoder, decoder, generator, temp_estimator)
@@ -798,6 +815,8 @@ def main():
             if opt.hallucinate:
                 H1.cuda()
                 H2.cuda()
+            if opt.crazy:
+                CRAZY.cuda()
     else:
         G.cpu()
         if not opt.supervision:
@@ -805,13 +824,15 @@ def main():
             if opt.hallucinate:
                 H1.cpu()
                 H2.cpu()
+            if opt.crazy:
+                CRAZY.cpu()
 
     nParams = sum([p.nelement() for p in G.parameters()])
     logger.info('* number of G parameters: %d' % nParams)
     if not opt.supervision:
         nParams = sum([p.nelement() for p in D.parameters()])
         logger.info('* number of D parameters: %d' % nParams)
-    trainModel(G, trainData, validData, dataset, optimizerG, D, optimizerD, H1, H2, H_crit, optimizerH1, optimizerH2)
+    trainModel(G, trainData, validData, dataset, optimizerG, D, optimizerD, H1, H2, H_crit, optimizerH1, optimizerH2, CRAZY, optimizerCRAZY)
 
 
 if __name__ == "__main__":
