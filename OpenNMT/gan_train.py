@@ -42,7 +42,7 @@ parser.add_argument('-hallucinate', type=bool, default=False,
                     help='Whether to use supervision')
 parser.add_argument('-perturbe_real', type=bool, default=True,
                     help='Whether to use use gumbel for real data')
-parser.add_argument('-h_overfeat', type=int, default=5,
+parser.add_argument('-h_overfeat', type=int, default=10,
                     help='Overfeat the hallucinator on each batch')
 parser.add_argument('-crazy', type=bool, default=False,
                     help='Whether to use supervision')
@@ -112,7 +112,7 @@ parser.add_argument('-param_init', type=float, default=0.1,
 parser.add_argument('-optim', default='sgd',
                     help="Optimization method. [sgd|adagrad|adadelta|adam]")
 parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
-parser.add_argument('-learning_rate', type=float, default=2e-3,
+parser.add_argument('-learning_rate', type=float, default=2e-4,
                     help="""Starting learning rate. If adagrad/adadelta/adam is
                     used, then this is the global learning rate. Recommended
                     settings: sgd = 1, adagrad = 0.1, adadelta = 1, adam = 0.1""")
@@ -424,20 +424,20 @@ def trainModel(G, trainData, validData, dataset, optimizerG, H1=None, H2=None,
             fake_batch = (pred_t, inverse_hallucination.detach())
             D_fake = CRAZY(fake_batch)
 
-            # logger.debug("[CRAZY]:")
-            #
-            # argmax_dfake_sorted = get_crazy_argmax(D_fake)
-            # argmax_inverse_hallucination_sorted = get_crazy_argmax(inverse_hallucination)
-            # argmax_preds_sorted = get_crazy_argmax(pred_t)
-            # rand_idx = np.random.randint(len(argmax_preds_sorted))
-            #
-            # logger.debug('SAMPLE:')
-            # logger.debug(
-            #     'preds: ' + str(" ".join(dataset['dicts']['tgt'].convertToLabels(argmax_preds_sorted[rand_idx], onmt.Constants.EOS))))
-            # logger.debug(
-            #     'dfake: ' + str(" ".join(dataset['dicts']['tgt'].convertToLabels(argmax_dfake_sorted[rand_idx], onmt.Constants.EOS))))
-            # logger.debug(
-            #     'inverse: ' + str(" ".join(dataset['dicts']['tgt'].convertToLabels(argmax_inverse_hallucination_sorted[rand_idx], onmt.Constants.EOS))))
+            logger.debug("[CRAZY]:")
+
+            argmax_dfake_sorted = get_crazy_argmax(D_fake)
+            argmax_inverse_hallucination_sorted = get_crazy_argmax(inverse_hallucination)
+            argmax_preds_sorted = get_crazy_argmax(pred_t)
+            rand_idx = np.random.randint(len(argmax_preds_sorted))
+
+            logger.debug('SAMPLE:')
+            logger.debug(
+                'generated targets:    ' + str(" ".join(dataset['dicts']['tgt'].convertToLabels(argmax_preds_sorted[rand_idx], onmt.Constants.EOS))))
+            logger.debug(
+                'generated sources:    ' + str(" ".join(dataset['dicts']['tgt'].convertToLabels(argmax_dfake_sorted[rand_idx], onmt.Constants.EOS))))
+            logger.debug(
+                'hallucinated sources: ' + str(" ".join(dataset['dicts']['tgt'].convertToLabels(argmax_inverse_hallucination_sorted[rand_idx], onmt.Constants.EOS))))
 
             # log(CRAZY, D_fake, pred_t, inverse_hallucination, dataset)
 
@@ -555,11 +555,11 @@ def main():
 
                 for p in H1.parameters():
                     p.data.uniform_(-opt.param_init, opt.param_init)
-                optimizerH1 = optim.Adam(H1.parameters(), lr=2e-2, betas=(opt.beta1, 0.999))
+                optimizerH1 = optim.Adam(H1.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
 
                 for p in H2.parameters():
                     p.data.uniform_(-opt.param_init, opt.param_init)
-                optimizerH2 = optim.Adam(H2.parameters(), lr=2e-2, betas=(opt.beta1, 0.999))
+                optimizerH2 = optim.Adam(H2.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
 
             generator = onmt.Models.Generator(opt, dicts['tgt'], temp_estimator)
             decoder = onmt.Models.Decoder(opt, dicts['tgt'], generator)
