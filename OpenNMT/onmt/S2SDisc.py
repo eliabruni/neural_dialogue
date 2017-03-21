@@ -135,10 +135,10 @@ class H_Decoder(nn.Module):
         return outputs, hidden, attn
 
 
-class Hallucinator(nn.Module):
+class CRAZY(nn.Module):
 
     def __init__(self, opt, encoder, decoder, generator):
-        super(Hallucinator, self).__init__()
+        super(CRAZY, self).__init__()
         self.log = {}
         self.log['distances'] = []
         self.opt = opt
