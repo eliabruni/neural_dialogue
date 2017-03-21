@@ -424,24 +424,6 @@ def trainModel(G, trainData, validData, dataset, optimizerG, H1=None, H2=None,
             fake_batch = (pred_t, inverse_hallucination.detach())
             D_fake = CRAZY(fake_batch)
 
-            logger.debug("[CRAZY]:")
-
-            argmax_dfake_sorted = get_crazy_argmax(D_fake)
-            argmax_inverse_hallucination_sorted = get_crazy_argmax(inverse_hallucination)
-            argmax_preds_sorted = get_crazy_argmax(pred_t)
-            rand_idx = np.random.randint(len(argmax_preds_sorted))
-
-            logger.debug('SAMPLE:')
-            logger.debug(
-                'generated targets:    ' + str(" ".join(dataset['dicts']['tgt'].convertToLabels(argmax_preds_sorted[rand_idx], onmt.Constants.EOS))))
-            logger.debug(
-                'generated sources:    ' + str(" ".join(dataset['dicts']['tgt'].convertToLabels(argmax_dfake_sorted[rand_idx], onmt.Constants.EOS))))
-            logger.debug(
-                'hallucinated sources: ' + str(" ".join(dataset['dicts']['tgt'].convertToLabels(argmax_inverse_hallucination_sorted[rand_idx], onmt.Constants.EOS))))
-
-            # log(CRAZY, D_fake, pred_t, inverse_hallucination, dataset)
-
-
             D_G_z1 = D_fake.data.mean()
             D_G_z2 = D_G_z1
             errG = crazy_criterion(D_fake, inverse_hallucination)
@@ -449,6 +431,27 @@ def trainModel(G, trainData, validData, dataset, optimizerG, H1=None, H2=None,
             # print('errG: ' + str(errG.data))
             # print('errD: ' + str(errD.data))
             errG.backward()
+
+            # logger.debug("[CRAZY]:")
+            #
+            # argmax_preds_sorted = get_crazy_argmax(pred_t)
+            # argmax_dfake_sorted = get_crazy_argmax(D_fake)
+            # argmax_inverse_hallucination_sorted = get_crazy_argmax(inverse_hallucination)
+            #
+            # rand_idx = np.random.randint(len(argmax_preds_sorted))
+            #
+            # logger.debug('SAMPLE:')
+            # logger.debug(
+            #     'generated targets:    ' + str(" ".join(dataset['dicts']['tgt'].convertToLabels(argmax_preds_sorted[rand_idx], onmt.Constants.EOS))))
+            # logger.debug(
+            #     'generated sources:    ' + str(" ".join(dataset['dicts']['tgt'].convertToLabels(argmax_dfake_sorted[rand_idx], onmt.Constants.EOS))))
+            # logger.debug(
+            #     'hallucinated sources: ' + str(" ".join(dataset['dicts']['tgt'].convertToLabels(argmax_inverse_hallucination_sorted[rand_idx], onmt.Constants.EOS))))
+
+            # log(CRAZY, D_fake, pred_t, inverse_hallucination, dataset)
+
+
+
 
             # print('ITERATION: ')
             # for p in G.parameters():
