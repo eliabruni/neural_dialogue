@@ -177,7 +177,7 @@ class CRAZY(nn.Module):
                       self._fix_enc_hidden(enc_hidden[1]))
 
         out, dec_hidden, _attn = self.decoder(tgt, enc_hidden, context, init_output)
-        out = out.view(-1, out.size(2))
-        out = self.generator(out)
+        # out = out.view(-1, out.size(2))
+        # out = self.generator(out)
 
         return out

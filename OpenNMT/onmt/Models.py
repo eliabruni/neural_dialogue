@@ -157,7 +157,7 @@ class Decoder(nn.Module):
 
                 # Masking PAD
                 out_t.data[:,onmt.Constants.PAD] = 0
-                out_t_sofmtmaxed = F.softmax(out_t)
+                out_t_sofmtmaxed = F.log_softmax(out_t)
 
                 if self.opt.st_conditioning:
                     argmaxed_preds  = torch.max(out_t_sofmtmaxed.data, 1)[1].squeeze()

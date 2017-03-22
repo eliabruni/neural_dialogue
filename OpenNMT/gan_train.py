@@ -98,7 +98,7 @@ parser.add_argument('--clip', type=float, default=0.5,
                     help='gradient clipping')
 parser.add_argument('-batch_size', type=int, default=64,
                     help='Maximum batch size')
-parser.add_argument('-max_generator_batches', type=int, default=64,
+parser.add_argument('-max_generator_batches', type=int, default=10000000,
                     help="""Maximum batches of words in a sequence to run
                     the generator on in parallel. Higher is faster, but uses
                     more memory.""")
@@ -196,7 +196,7 @@ def H_memoryEfficientLoss(H , dataset, outputs, sources, targets, generator, cri
 
 def log(G, outputs, sources, targets, dataset):
 
-        pred_t = F.softmax(outputs)
+        pred_t = F.log_softmax(outputs)
         log_predictions(pred_t, sources, targets, G.log['distances'], dataset['dicts']['tgt'])
 
 
@@ -259,7 +259,7 @@ def log_predictions(pred_t, src_t, targ_t, distances, tgt_dict):
     else:
         avg_dist = np.mean(distances[:-10])
         avg_dist_10 = np.mean(distances[-10:])
-    logger.debug('past avg lev distance: %f, last 10 avg lev distance %f' % (avg_dist, avg_dist_10))
+    logger.debug('past avg lev distance: %f, last 10 avg lev distance %f\n' % (avg_dist, avg_dist_10))
 
 
 
@@ -281,8 +281,6 @@ def trainModel(G, trainData, validData, dataset, optimizerG, H1=None, H2=None,
         CRAZY.train()
 
 
-    crazy_criterion = nn.MSELoss()
-
     cxt_criterion = NMTCriterion(dataset['dicts']['tgt'].size())
 
     def trainEpoch(epoch):
@@ -290,8 +288,9 @@ def trainModel(G, trainData, validData, dataset, optimizerG, H1=None, H2=None,
         # shuffle mini batch order
         batchOrder = torch.randperm(len(trainData))
 
-        total_loss, report_loss = 0, 0
-        total_words, report_words = 0, 0
+        real_report_loss = real_report_words = 0
+        fake_report_loss = fake_report_words = 0
+
         start = time.time()
 
         for i in range(len(trainData)):
@@ -313,6 +312,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, H1=None, H2=None,
                     h_outputs = H1(batch)
                     sources = batch[0]
                     targets = batch[1][1:]  # exclude <s> from targets
+
                     if log_pred and j == 4:
                         logger.debug("[HALLUCINATOR 1]:")
                     loss, gradOutput = H_memoryEfficientLoss(
@@ -387,15 +387,13 @@ def trainModel(G, trainData, validData, dataset, optimizerG, H1=None, H2=None,
 
 
 
-
-
             pert1 = hallucination
             if opt.perturbe_real:
                 pert1 = G.generator.sampler(hallucination)
             # Masking PAD: we do it before softmax, as in generation
             pert1.data[:, onmt.Constants.PAD] = 0
 
-            hallucination = F.softmax(pert1)
+            hallucination = F.log_softmax(pert1)
 
             pert2 = inverse_hallucination
 
@@ -403,106 +401,129 @@ def trainModel(G, trainData, validData, dataset, optimizerG, H1=None, H2=None,
                 pert2 = G.generator.sampler(inverse_hallucination)
             # Masking PAD: we do it before softmax, as in generation
             pert2.data[:, onmt.Constants.PAD] = 0
-            inverse_hallucination = F.softmax(pert2)
-
-            inverse_hallucination = Variable(inverse_hallucination.data, requires_grad=False)
+            inverse_hallucination = F.log_softmax(pert2)
 
             # LEARNING FAKE
 
             G.zero_grad()
-            pred_t = F.softmax(outputs)
-            fake_batch = (pred_t, inverse_hallucination.detach())
+            pred_t = F.log_softmax(outputs)
+            fake_batch = (pred_t, inverse_hallucination)
             D_fake = CRAZY(fake_batch)
 
             D_G_z1 = D_fake.data.mean()
             D_G_z2 = D_G_z1
-            errG = crazy_criterion(D_fake, inverse_hallucination)
 
+            inverse_hallucination = Variable(inverse_hallucination.data, requires_grad=False)
 
-            errG.backward()
+            # hallucination_view = hallucination.view(hallucination.size(0)/opt.batch_size,opt.batch_size,hallucination.size(1))
+            # inverse_hallucination_view = inverse_hallucination.view(inverse_hallucination.size(0)/opt.batch_size,opt.batch_size,inverse_hallucination.size(1))
+            # print('inverse_hallucination: ' + str(inverse_hallucination))
+            sources = Variable(torch.max(hallucination.data, 1)[1].squeeze(), requires_grad=False)
+            targets = Variable(torch.max(inverse_hallucination.data, 1)[1].squeeze(), requires_grad=False)
+            # sources = sources.view(sources.size(0)/opt.batch_size,opt.batch_size)
+            sources = sources.view(sources.size(0)/opt.batch_size, opt.batch_size)
+            targets = targets.view(targets.size(0)/opt.batch_size, opt.batch_size)
+            num_words = targets.data.ne(onmt.Constants.PAD).sum()
+
+            real_report_words += num_words
+            fake_report_words += num_words
+
+            # D_fake = D_fake.view(D_fake.size(0)/opt.batch_size,opt.batch_size,D_fake.size(1))
+            if log_pred:
+                logger.debug("[FAKE]:")
+            loss, gradOutput = H_memoryEfficientLoss(
+                CRAZY, dataset, D_fake, sources, targets, CRAZY.generator, cxt_criterion,
+                log_pred)
+            D_fake.backward(gradOutput)
+            fake_report_loss += loss
+            optimizerG.step()
+
+            # errG = cxt_criterion(D_fake, labels)
+            # errG.backward()
 
             # print('ITERATION: ')
             # for p in G.parameters():
             #     print('p.grad.data: ' + str(p.grad.data))
-            optimizerG.step()
 
 
             # LEARNING REAL
-
-
             CRAZY.zero_grad()
-
-
-
-            real_batch = (hallucination.detach(), inverse_hallucination.detach())
+            real_batch = (hallucination.detach(), inverse_hallucination)
 
             D_real = CRAZY(real_batch)
             D_x = D_real.data.mean()
+            if log_pred:
+                logger.debug("[REAL]:")
+            loss, gradOutput = H_memoryEfficientLoss(
+                CRAZY, dataset, D_real, sources, targets, CRAZY.generator, cxt_criterion,
+                log_pred)
 
-
-            errD = crazy_criterion(D_real, inverse_hallucination)
-            errD.backward()
+            D_real.backward(gradOutput)
+            real_report_loss += loss
+            optimizerCRAZY.step()
+            # errD = cxt_criterion(D_real, labels)
+            # real_report_loss += errD.data[0]
+            # errD.backward()
 
             # print('ITERATION: ')
             # for p in CRAZY.parameters():
             #     print('p.grad.data: ' + str(p.grad.data))
-            optimizerCRAZY.step()
-
-            # logger.debug("[CRAZY]:")
-            #
-            # argmax_preds_sorted = get_crazy_argmax(pred_t)
-            # argmax_hallucination_sorted = get_crazy_argmax(hallucination)
-            #
-            # argmax_dfake_sorted = get_crazy_argmax(D_fake)
-            # argmax_inverse_hallucination_sorted = get_crazy_argmax(inverse_hallucination)
-            #
-            # rand_idx = np.random.randint(len(argmax_preds_sorted))
-            #
-            # logger.debug('SAMPLE:')
-            #
-            # logger.debug(
-            #     'generated targets:    ' + str(" ".join(dataset['dicts']['tgt'].convertToLabels(argmax_preds_sorted[rand_idx], onmt.Constants.EOS))))
-            # logger.debug(
-            #     'hallucinated targets:    ' + str(" ".join(
-            #         dataset['dicts']['tgt'].convertToLabels(argmax_hallucination_sorted[rand_idx], onmt.Constants.EOS))))
-            # logger.debug(
-            #     'generated sources:    ' + str(" ".join(dataset['dicts']['tgt'].convertToLabels(argmax_dfake_sorted[rand_idx], onmt.Constants.EOS))))
-            # logger.debug(
-            #     'hallucinated sources: ' + str(" ".join(dataset['dicts']['tgt'].convertToLabels(argmax_inverse_hallucination_sorted[rand_idx], onmt.Constants.EOS))))
-            #
-            #
-            # print('errG: ' + str(errG.data))
-            # print('errD: ' + str(errD.data))
-
-
-
 
             # anneal tau for gumbel
             if opt.use_gumbel and opt.gumbel_anneal_interval > 0 and not opt.estimate_temp and i % opt.gumbel_anneal_interval == 0 and i > 0:
                 G.anneal_tau_temp()
 
             if i % opt.log_interval == 0 and i > 0:
-                logger.info('[%d/%d][%d/%d] Temp: %.4f Loss_D: %.4f Loss_G: %.4f D(x): %.4f D(G(z)): %.4f / %.4f\n\n'
+                # log_crazy(D_fake, D_real, hallucination, inverse_hallucination, pred_t)
+                logger.info('[%d/%d][%d/%d] Temp: %.4f; Real Ppl: %6.2f, Fake Ppl: %6.2f;\n\n'
                       % (epoch, opt.epochs, i, len(trainData),
-                         G.generator.temperature, errD.data[0], errG.data[0], D_x, D_G_z1, D_G_z2))
+                         G.generator.temperature,
+                         math.exp(real_report_loss / real_report_words), math.exp(fake_report_loss / fake_report_words)))
 
-            report_loss = report_words = 0
+                real_report_loss = real_report_words = 0
+                fake_report_loss = fake_report_words = 0
             start = time.time()
             G.iter_cnt+=1
 
         return 0
 
-    def get_crazy_argmax(pred_t):
-        pred_t_data = pred_t.data.cpu().numpy()
-        argmaxed_preds = np.argmax(pred_t_data, axis=1)
-        argmax_preds_sorted = np.ones((opt.batch_size, argmaxed_preds.size / opt.batch_size))
-        cnt = 0
-        for i in range(0, argmaxed_preds.size, opt.batch_size):
-            for j in range(opt.batch_size):
-                argmax_preds_sorted[j][cnt] = argmaxed_preds[i + j]
-            cnt += 1
-        argmax_preds_sorted = argmax_preds_sorted.astype(int)
-        return argmax_preds_sorted
+    def log_crazy(D_fake, D_real, hallucination, inverse_hallucination, pred_t):
+
+        # argmax conversion
+
+        # REAL
+        # argmax_hallucination_sorted = get_crazy_argmax(hallucination)
+        # argmax_inverse_hallucination_sorted = get_crazy_argmax(inverse_hallucination)
+        # argmax_dreal_sorted = get_crazy_argmax(D_real)
+        #
+        # FAKE
+        # argmax_preds_sorted = get_crazy_argmax(pred_t)
+        # argmax_dfake_sorted = get_crazy_argmax(D_fake)
+
+
+        # radnomly sample one sentence
+        rand_idx = np.random.randint(len(argmax_preds_sorted))
+        logger.debug("[CRAZY]:")
+        logger.debug('SAMPLE:')
+        logger.debug(
+            'hallucinated targets: ' + str(" ".join(
+                dataset['dicts']['tgt'].convertToLabels(argmax_hallucination_sorted[rand_idx], onmt.Constants.EOS))))
+        logger.debug(
+            'hallucinated sources: ' + str(" ".join(
+                dataset['dicts']['tgt'].convertToLabels(argmax_inverse_hallucination_sorted[rand_idx],
+                                                        onmt.Constants.EOS))))
+        logger.debug(
+            'crazy real sources:   ' + str(" ".join(
+                dataset['dicts']['tgt'].convertToLabels(argmax_dreal_sorted[rand_idx],
+                                                        onmt.Constants.EOS))))
+        logger.debug(
+            'generated targets:    ' + str(
+                " ".join(dataset['dicts']['tgt'].convertToLabels(argmax_preds_sorted[rand_idx], onmt.Constants.EOS))))
+        logger.debug(
+            'generated sources:    ' + str(
+                " ".join(dataset['dicts']['tgt'].convertToLabels(argmax_dfake_sorted[rand_idx], onmt.Constants.EOS))))
+
+
 
     for epoch in range(opt.start_epoch, opt.epochs + 1):
 
