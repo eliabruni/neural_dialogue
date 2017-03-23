@@ -386,7 +386,6 @@ def trainModel(G, trainData, validData, dataset, optimizerG, H1=None, H2=None,
                 log(G, outputs, sources, targets, dataset)
 
 
-
             pert1 = hallucination
             if opt.perturbe_real:
                 pert1 = G.generator.sampler(hallucination)
@@ -403,21 +402,8 @@ def trainModel(G, trainData, validData, dataset, optimizerG, H1=None, H2=None,
             pert2.data[:, onmt.Constants.PAD] = 0
             inverse_hallucination = F.log_softmax(pert2)
 
-            # LEARNING FAKE
-
-            G.zero_grad()
-            pred_t = F.log_softmax(outputs)
-            fake_batch = (pred_t, inverse_hallucination)
-            D_fake = CRAZY(fake_batch)
-
-            D_G_z1 = D_fake.data.mean()
-            D_G_z2 = D_G_z1
 
             inverse_hallucination = Variable(inverse_hallucination.data, requires_grad=False)
-
-            # hallucination_view = hallucination.view(hallucination.size(0)/opt.batch_size,opt.batch_size,hallucination.size(1))
-            # inverse_hallucination_view = inverse_hallucination.view(inverse_hallucination.size(0)/opt.batch_size,opt.batch_size,inverse_hallucination.size(1))
-            # print('inverse_hallucination: ' + str(inverse_hallucination))
             sources = Variable(torch.max(hallucination.data, 1)[1].squeeze(), requires_grad=False)
             targets = Variable(torch.max(inverse_hallucination.data, 1)[1].squeeze(), requires_grad=False)
             # sources = sources.view(sources.size(0)/opt.batch_size,opt.batch_size)
@@ -428,30 +414,12 @@ def trainModel(G, trainData, validData, dataset, optimizerG, H1=None, H2=None,
             real_report_words += num_words
             fake_report_words += num_words
 
-            # D_fake = D_fake.view(D_fake.size(0)/opt.batch_size,opt.batch_size,D_fake.size(1))
-            if log_pred:
-                logger.debug("[FAKE]:")
-            loss, gradOutput = H_memoryEfficientLoss(
-                CRAZY, dataset, D_fake, sources, targets, CRAZY.generator, cxt_criterion,
-                log_pred)
-            D_fake.backward(gradOutput)
-            fake_report_loss += loss
-            optimizerG.step()
-
-            # errG = cxt_criterion(D_fake, labels)
-            # errG.backward()
-
-            # print('ITERATION: ')
-            # for p in G.parameters():
-            #     print('p.grad.data: ' + str(p.grad.data))
-
-
             # LEARNING REAL
             CRAZY.zero_grad()
             real_batch = (hallucination.detach(), inverse_hallucination)
 
             D_real = CRAZY(real_batch)
-            D_x = D_real.data.mean()
+
             if log_pred:
                 logger.debug("[REAL]:")
             loss, gradOutput = H_memoryEfficientLoss(
@@ -461,13 +429,28 @@ def trainModel(G, trainData, validData, dataset, optimizerG, H1=None, H2=None,
             D_real.backward(gradOutput)
             real_report_loss += loss
             optimizerCRAZY.step()
-            # errD = cxt_criterion(D_real, labels)
-            # real_report_loss += errD.data[0]
-            # errD.backward()
 
+            # LEARNING FAKE
+            G.zero_grad()
+            pred_t = F.log_softmax(outputs)
+            fake_batch = (pred_t, inverse_hallucination)
+            D_fake = CRAZY(fake_batch)
+            if log_pred:
+                logger.debug("[FAKE]:")
+            loss, gradOutput = H_memoryEfficientLoss(
+                CRAZY, dataset, D_fake, sources, targets, CRAZY.generator, cxt_criterion,
+                log_pred)
+            D_fake.backward(gradOutput)
+            fake_report_loss += loss
             # print('ITERATION: ')
             # for p in CRAZY.parameters():
             #     print('p.grad.data: ' + str(p.grad.data))
+
+            optimizerG.step()
+
+            # TODO: WARNING!!!
+            optimizerCRAZY.step()
+            # TODO: WARNING!!!
 
             # anneal tau for gumbel
             if opt.use_gumbel and opt.gumbel_anneal_interval > 0 and not opt.estimate_temp and i % opt.gumbel_anneal_interval == 0 and i > 0:
@@ -492,13 +475,13 @@ def trainModel(G, trainData, validData, dataset, optimizerG, H1=None, H2=None,
         # argmax conversion
 
         # REAL
-        # argmax_hallucination_sorted = get_crazy_argmax(hallucination)
-        # argmax_inverse_hallucination_sorted = get_crazy_argmax(inverse_hallucination)
-        # argmax_dreal_sorted = get_crazy_argmax(D_real)
-        #
+        argmax_hallucination_sorted = get_crazy_argmax(hallucination)
+        argmax_inverse_hallucination_sorted = get_crazy_argmax(inverse_hallucination)
+        argmax_dreal_sorted = get_crazy_argmax(D_real)
+
         # FAKE
-        # argmax_preds_sorted = get_crazy_argmax(pred_t)
-        # argmax_dfake_sorted = get_crazy_argmax(D_fake)
+        argmax_preds_sorted = get_crazy_argmax(pred_t)
+        argmax_dfake_sorted = get_crazy_argmax(D_fake)
 
 
         # radnomly sample one sentence
@@ -599,12 +582,10 @@ def main():
                 for p in H1.parameters():
                     p.data.uniform_(-opt.param_init, opt.param_init)
                 optimizerH1 = optim.Adam(H1.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
-                # optimizerH1 = optim.Adam(H1.parameters(), lr=2e-2, betas=(opt.beta1, 0.999))
 
                 for p in H2.parameters():
                     p.data.uniform_(-opt.param_init, opt.param_init)
                 optimizerH2 = optim.Adam(H2.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
-                # optimizerH2 = optim.Adam(H2.parameters(), lr=2e-2, betas=(opt.beta1, 0.999))
 
             generator = onmt.Models.Generator(opt, dicts['tgt'], temp_estimator)
             decoder = onmt.Models.Decoder(opt, dicts['tgt'], generator)
