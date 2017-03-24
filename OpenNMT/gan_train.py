@@ -449,7 +449,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, H1=None, H2=None,
             optimizerG.step()
 
             # TODO: WARNING!!!
-            optimizerCRAZY.step()
+            # optimizerCRAZY.step()
             # TODO: WARNING!!!
 
             # anneal tau for gumbel
