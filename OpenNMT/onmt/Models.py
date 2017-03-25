@@ -381,3 +381,41 @@ class D(nn.Module):
         if not self.opt.wasser:
             out = self.sigmoid(out)
         return out
+
+
+class D2(nn.Module):
+    def __init__(self, opt, dicts):
+        self.opt = opt
+        self.vocab_size = dicts.size()
+        self.rnn_size = opt.d_rnn_size
+        self.num_layers = opt.d_layers
+        self.num_directions = 2 if opt.brnn else 1
+        super(D2, self).__init__()
+        self.onehot_embedding = nn.Linear(self.vocab_size, self.rnn_size)
+        self.rnn1 = nn.LSTM(self.vocab_size, self.rnn_size, num_layers=opt.d_layers, bidirectional=True,dropout=opt.d_dropout)
+        self.attn = onmt.modules.GlobalAttention(self.rnn_size*2)
+        self.l_out = nn.Linear(self.rnn_size * 2, 1)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+
+        onehot_embeds = self.onehot_embedding(x.contiguous().view(x.size()[0]*x.size()[1], x.size()[2]))
+        embeds = onehot_embeds.view(x.size()[0], x.size()[1], onehot_embeds.size()[1])
+        _batch_size = embeds.size(1)
+
+        h = Variable(torch.zeros(self.opt.d_layers * self.num_directions, _batch_size, self.rnn_size))
+        if self.opt.cuda:
+            h = h.cuda()
+        c = Variable(torch.zeros(self.opt.d_layers * self.num_directions, _batch_size, self.rnn_size))
+        if self.opt.cuda:
+            c = c.cuda()
+        context, (hn,_) = self.rnn1(embeds, (h, c))
+        hn_tot = torch.cat([hn[0], hn[1]], 1)
+        for i in range(2,self.num_layers,2):
+            tmp_hn = torch.cat([hn[i], hn[i+1]], 1)
+            hn_tot = hn_tot + tmp_hn
+
+        out, attn = self.attn(hn_tot,torch.transpose(context,1,0))
+        out = self.l_out(out)
+        out = self.sigmoid(out)
+        return out, attn.t()

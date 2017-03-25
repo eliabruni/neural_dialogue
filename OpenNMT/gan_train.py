@@ -85,7 +85,7 @@ parser.add_argument('-d_rnn_size', type=int, default=100,
                     help='D: Size fo LSTM hidden states')
 parser.add_argument('-d_dropout', type=float, default=0.3,
                     help='Dropout probability; applied between LSTM stacks.')
-parser.add_argument('-d_layers', type=int, default=3,
+parser.add_argument('-d_layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
 
 ## Hallucinator options
