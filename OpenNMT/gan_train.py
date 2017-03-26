@@ -559,11 +559,11 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
 
                     # train with real
-                    D_real = D(real.detach())
+                    D_real, attn = D(real.detach())
                     D_x = D_real.data.mean()
 
                     # train with fake
-                    D_fake = D(fake.detach())
+                    D_fake, attn = D(fake.detach())
                     D_G_z1 = D_fake.data.mean()
                     errD = -(torch.mean(D_real) - torch.mean(D_fake))
                     errD.backward()
@@ -583,7 +583,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         # (2) Update G network: maximize log(D(G(z)))
                         ###########################
                         G.zero_grad()
-                        D_fake = D(fake)
+                        D_fake, attn = D(fake)
                         errG = -torch.mean(D_fake)
                         errG.backward()
                         D_G_z2 = D_fake.data.mean()
@@ -601,7 +601,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     D.zero_grad()
 
                     # train with real
-                    D_real = D(real)
+                    D_real, attn = D(real)
                     label = torch.FloatTensor(opt.batch_size)
                     if opt.cuda:
                         label = label.cuda()
@@ -615,7 +615,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
                     # train with fake
                     label.data.fill_(fake_label)
-                    D_fake = D(fake.detach())
+                    D_fake, attn = D(fake.detach())
                     errD_fake = criterion(D_fake, label)
                     errD_fake.backward()
 
@@ -630,7 +630,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     G.zero_grad()
 
                     label.data.fill_(real_label)  # fake labels are real for generator cost
-                    D_fake = D(fake)
+                    D_fake, attn = D(fake)
 
                     if opt.bgan:
                         errG = 0.5 * torch.mean((torch.log(D_fake) - torch.log(1 - D_fake)) ** 2)

@@ -349,13 +349,13 @@ class D2(nn.Module):
         return out
 
 
-class D(nn.Module):
+class D1(nn.Module):
     def __init__(self, opt, dicts):
         self.opt = opt
         self.vocab_size = dicts.size()
         self.rnn_size = opt.d_rnn_size
         self.num_directions = 2 if opt.brnn else 1
-        super(D, self).__init__()
+        super(D1, self).__init__()
         self.onehot_embedding = nn.Linear(self.vocab_size, self.rnn_size)
         self.rnn0 = nn.LSTM(self.rnn_size, self.rnn_size,
                         num_layers=opt.d_layers,
@@ -383,16 +383,16 @@ class D(nn.Module):
         return out
 
 
-class D2(nn.Module):
+class D(nn.Module):
     def __init__(self, opt, dicts):
         self.opt = opt
         self.vocab_size = dicts.size()
         self.rnn_size = opt.d_rnn_size
         self.num_layers = opt.d_layers
         self.num_directions = 2 if opt.brnn else 1
-        super(D2, self).__init__()
+        super(D, self).__init__()
         self.onehot_embedding = nn.Linear(self.vocab_size, self.rnn_size)
-        self.rnn1 = nn.LSTM(self.vocab_size, self.rnn_size, num_layers=opt.d_layers, bidirectional=True,dropout=opt.d_dropout)
+        self.rnn1 = nn.LSTM(self.rnn_size, self.rnn_size, num_layers=opt.d_layers, bidirectional=True,dropout=opt.d_dropout)
         self.attn = onmt.modules.GlobalAttention(self.rnn_size*2)
         self.l_out = nn.Linear(self.rnn_size * 2, 1)
         self.sigmoid = nn.Sigmoid()
