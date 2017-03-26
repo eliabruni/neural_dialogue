@@ -223,6 +223,7 @@ def memoryEfficientLoss(G,H1,H2, outputs, sources, targets, dataset, criterion, 
 
     loss = 0
     fake, real = None, None
+    fake_mode = None
 
     if eval:
         pred_t = F.log_softmax(outputs)

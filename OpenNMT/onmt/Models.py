@@ -395,7 +395,8 @@ class D(nn.Module):
         self.rnn1 = nn.LSTM(self.rnn_size, self.rnn_size, num_layers=opt.d_layers, bidirectional=True,dropout=opt.d_dropout)
         self.attn = onmt.modules.GlobalAttention(self.rnn_size*2)
         self.l_out = nn.Linear(self.rnn_size * 2, 1)
-        self.sigmoid = nn.Sigmoid()
+        if not self.opt.wasser:
+            self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
 
@@ -417,5 +418,6 @@ class D(nn.Module):
 
         out, attn = self.attn(hn_tot,torch.transpose(context,1,0))
         out = self.l_out(out)
-        out = self.sigmoid(out)
+        if not self.opt.wasser:
+            out = self.sigmoid(out)
         return out, attn.t()
