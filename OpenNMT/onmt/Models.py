@@ -311,12 +311,12 @@ class G(nn.Module):
             out = self.generator(out)
         return out
 
-class D2(nn.Module):
+class D0(nn.Module):
     def __init__(self, opt, dicts):
         self.opt = opt
         self.vocab_size = dicts.size()
         self.rnn_size = opt.d_rnn_size
-        super(D, self).__init__()
+        super(D0, self).__init__()
         self.onehot_embedding = nn.Linear(self.vocab_size, self.rnn_size)
         self.rnn1 = nn.LSTM(self.rnn_size, self.rnn_size, 1, bidirectional=True,dropout=opt.d_dropout)
         self.attn = onmt.modules.GlobalAttention(self.rnn_size*2)
@@ -383,14 +383,14 @@ class D1(nn.Module):
         return out
 
 
-class D(nn.Module):
+class D3(nn.Module):
     def __init__(self, opt, dicts):
         self.opt = opt
         self.vocab_size = dicts.size()
         self.rnn_size = opt.d_rnn_size
         self.num_layers = opt.d_layers
         self.num_directions = 2 if opt.brnn else 1
-        super(D, self).__init__()
+        super(D3, self).__init__()
         self.onehot_embedding = nn.Linear(self.vocab_size, self.rnn_size)
         self.rnn1 = nn.LSTM(self.rnn_size, self.rnn_size, num_layers=opt.d_layers, bidirectional=True,dropout=opt.d_dropout)
         self.attn = onmt.modules.GlobalAttention(self.rnn_size*2)
@@ -421,3 +421,55 @@ class D(nn.Module):
         if not self.opt.wasser:
             out = self.sigmoid(out)
         return out, attn.t()
+
+
+class CNN(nn.Module):
+    def __init__(self, opt, dicts):
+        self.opt = opt
+        super(CNN, self).__init__()
+        V = dicts.size()
+        D = opt.cnn_embed_dim
+        C = 1
+        Ci = 1
+        Co = opt.cnn_kernel_num
+        Ks = opt.cnn_kernel_sizes
+
+        self.embed = nn.Linear(V, D)
+        print('Ci, Co, (K, D): ' + str(Ci) + ' '+  str(Co) + ' '  + str(D))
+        self.convs1 = [nn.Conv2d(Ci, Co, (K, D)) for K in Ks]
+        '''
+        self.conv13 = nn.Conv2d(Ci, Co, (3, D))
+        self.conv14 = nn.Conv2d(Ci, Co, (4, D))
+        self.conv15 = nn.Conv2d(Ci, Co, (5, D))
+        '''
+        self.dropout = nn.Dropout(opt.cnn_dropout)
+        self.fc1 = nn.Linear(len(Ks) * Co, C)
+
+    def conv_and_pool(self, x, conv):
+        x = F.relu(conv(x)).squeeze(3)  # (N,Co,W)
+        x = F.max_pool1d(x, x.size(2)).squeeze(2)
+        return x
+
+    def forward(self, x):
+        onehot_embeds = self.embed(x.contiguous().view(x.size()[0] * x.size()[1], x.size()[2]))  # (N,W,D)
+        x = onehot_embeds.view(x.size()[0], x.size()[1], onehot_embeds.size()[1])
+
+        x = x.t()
+
+        if self.opt.cnn_static:
+            x = Variable(x)
+
+        x = x.unsqueeze(1)  # (N,Ci,W,D)
+
+        x = [F.relu(conv(x)).squeeze(3) for conv in self.convs1]  # [(N,Co,W), ...]*len(Ks)
+        x = [F.max_pool1d(i, i.size(2)).squeeze(2) for i in x]  # [(N,Co), ...]*len(Ks)
+        x = torch.cat(x, 1)
+        '''
+        x1 = self.conv_and_pool(x,self.conv13) #(N,Co)
+        x2 = self.conv_and_pool(x,self.conv14) #(N,Co)
+        x3 = self.conv_and_pool(x,self.conv15) #(N,Co)
+        x = torch.cat((x1, x2, x3), 1) # (N,len(Ks)*Co)
+        '''
+        x = self.dropout(x)  # (N,len(Ks)*Co)
+        logit = self.fc1(x)  # (N,C)
+        return logit, None

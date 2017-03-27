@@ -88,6 +88,15 @@ parser.add_argument('-d_dropout', type=float, default=0.3,
 parser.add_argument('-d_layers', type=int, default=2,
                     help='Number of layers in the LSTM encoder/decoder')
 
+## CNN options
+parser.add_argument('-cnn_dropout', type=float, default=0.5, help='the probability for dropout [default: 0.5]')
+parser.add_argument('-cnn_max_norm', type=float, default=3.0, help='l2 constraint of parameters [default: 3.0]')
+parser.add_argument('-cnn_embed_dim', type=int, default=128, help='number of embedding dimension [default: 128]')
+parser.add_argument('-cnn_kernel_num', type=int, default=500, help='number of each kind of kernel')
+parser.add_argument('-cnn_kernel_sizes', type=str, default=[3,4,5,6,7,8,9,10], help='comma-separated kernel size to use for convolution')
+parser.add_argument('-cnn_static', action='store_true', default=False, help='fix the embedding')
+
+
 ## Hallucinator options
 parser.add_argument('-H_rnn_size', type=int, default=5,
                     help='D: Size fo LSTM hidden states')
@@ -758,7 +767,8 @@ def main():
         D = None
         optimizerD = None
         if not opt.supervision:
-            D = onmt.Models.D(opt, dicts['tgt'])
+            # D = onmt.Models.D(opt, dicts['tgt'])
+            D = onmt.Models.CNN(opt, dicts['tgt'])
 
             for p in D.parameters():
                 p.data.uniform_(-opt.param_init, opt.param_init)
