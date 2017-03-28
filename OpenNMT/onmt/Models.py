@@ -435,7 +435,6 @@ class CNN(nn.Module):
         Ks = opt.cnn_kernel_sizes
 
         self.embed = nn.Linear(V, D)
-        print('Ci, Co, (K, D): ' + str(Ci) + ' '+  str(Co) + ' '  + str(D))
 
         if self.opt.cuda:
             self.convs1 = [nn.Conv2d(Ci, Co, (K, D)).cuda() for K in Ks]
@@ -448,6 +447,8 @@ class CNN(nn.Module):
         '''
         self.dropout = nn.Dropout(opt.cnn_dropout)
         self.fc1 = nn.Linear(len(Ks) * Co, C)
+        if not self.opt.wasser:
+            self.sigmoid = nn.Sigmoid()
 
     def conv_and_pool(self, x, conv):
         x = F.relu(conv(x)).squeeze(3)  # (N,Co,W)
@@ -479,4 +480,6 @@ class CNN(nn.Module):
         '''
         x = self.dropout(x)  # (N,len(Ks)*Co)
         logit = self.fc1(x)  # (N,C)
+        if not self.opt.wasser:
+            logit = self.sigmoid(logit)
         return logit, None

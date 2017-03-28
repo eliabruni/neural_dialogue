@@ -232,7 +232,7 @@ def memoryEfficientLoss(G,H1,H2, outputs, sources, targets, dataset, criterion, 
 
     loss = 0
     fake, real = None, None
-    fake_mode = None
+    fake_mode = 0
 
     if eval:
         pred_t = F.log_softmax(outputs)
@@ -304,7 +304,6 @@ def memoryEfficientLoss(G,H1,H2, outputs, sources, targets, dataset, criterion, 
 
         if opt.multi_fake:
             fake_mode = random.randint(2)
-
             # standard fake
             if fake_mode == 0:
                 fake = torch.cat([noise_sources, pred_t], 0)
@@ -576,6 +575,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     D_fake, attn = D(fake.detach())
                     D_G_z1 = D_fake.data.mean()
                     errD = -(torch.mean(D_real) - torch.mean(D_fake))
+                    print('errD: ' + str(errD))
                     errD.backward()
 
                     optimizerD.step()
@@ -632,29 +632,32 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     D_G_z1 = D_fake.data.mean()
                     errD = errD_real + errD_fake
 
+                    print('errD: ' + str(errD))
+
                     optimizerD.step()
 
-                    ############################
-                    # (2) Update G network: maximize log(D(G(z)))
-                    ###########################
-                    G.zero_grad()
+                    if i % opt.g_train_interval == 0 and fake_mode == 0:
+                        ############################
+                        # (2) Update G network: maximize log(D(G(z)))
+                        ###########################
+                        G.zero_grad()
 
-                    label.data.fill_(real_label)  # fake labels are real for generator cost
-                    D_fake, attn = D(fake)
+                        label.data.fill_(real_label)  # fake labels are real for generator cost
+                        D_fake, attn = D(fake)
 
-                    if opt.bgan:
-                        errG = 0.5 * torch.mean((torch.log(D_fake) - torch.log(1 - D_fake)) ** 2)
-                    else:
-                        errG = criterion(D_fake, label)
+                        if opt.bgan:
+                            errG = 0.5 * torch.mean((torch.log(D_fake) - torch.log(1 - D_fake)) ** 2)
+                        else:
+                            errG = criterion(D_fake, label)
 
-                    errG.backward()
-                    D_G_z2 = D_fake.data.mean()
+                        errG.backward()
+                        D_G_z2 = D_fake.data.mean()
 
-                    # print('ITERATION: ')
-                    # for p in G.parameters():
-                    #     print('p.grad.data: ' + str(p.grad.data))
+                        # print('ITERATION: ')
+                        # for p in G.parameters():
+                        #     print('p.grad.data: ' + str(p.grad.data))
 
-                    optimizerG.step()
+                        optimizerG.step()
 
                 # anneal tau for gumbel
                 if opt.use_gumbel and opt.gumbel_anneal_interval > 0 and not opt.estimate_temp and i % opt.gumbel_anneal_interval == 0 and i > 0:
@@ -767,8 +770,8 @@ def main():
         D = None
         optimizerD = None
         if not opt.supervision:
-            # D = onmt.Models.D(opt, dicts['tgt'])
-            D = onmt.Models.CNN(opt, dicts['tgt'])
+            D = onmt.Models.D3(opt, dicts['tgt'])
+            # D = onmt.Models.CNN(opt, dicts['tgt'])
 
             for p in D.parameters():
                 p.data.uniform_(-opt.param_init, opt.param_init)
