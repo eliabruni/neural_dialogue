@@ -388,11 +388,12 @@ class D3(nn.Module):
         self.opt = opt
         self.vocab_size = dicts.size()
         self.rnn_size = opt.d_rnn_size
+        self.word_vec_size = opt.d_word_vec_size
         self.num_layers = opt.d_layers
         self.num_directions = 2 if opt.brnn else 1
         super(D3, self).__init__()
-        self.onehot_embedding = nn.Linear(self.vocab_size, self.rnn_size)
-        self.rnn1 = nn.LSTM(self.rnn_size, self.rnn_size, num_layers=opt.d_layers, bidirectional=True,dropout=opt.d_dropout)
+        self.onehot_embedding = nn.Linear(self.vocab_size, self.word_vec_size)
+        self.rnn1 = nn.LSTM(self.word_vec_size, self.rnn_size, num_layers=opt.d_layers, bidirectional=True,dropout=opt.d_dropout)
         self.attn = onmt.modules.GlobalAttention(self.rnn_size*2)
         self.l_out = nn.Linear(self.rnn_size * 2, 1)
         if not self.opt.wasser:
