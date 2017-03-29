@@ -575,7 +575,6 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     D_fake, attn = D(fake.detach())
                     D_G_z1 = D_fake.data.mean()
                     errD = -(torch.mean(D_real) - torch.mean(D_fake))
-                    print('errD: ' + str(errD))
                     errD.backward()
 
                     optimizerD.step()
@@ -631,8 +630,6 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
                     D_G_z1 = D_fake.data.mean()
                     errD = errD_real + errD_fake
-
-                    print('errD: ' + str(errD))
 
                     optimizerD.step()
 
