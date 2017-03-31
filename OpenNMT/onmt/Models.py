@@ -252,9 +252,9 @@ class TempEstimator(nn.Module):
         else:
             input_dim = opt.rnn_size * opt.layers * opt.batch_size
         linear1_size = int(round(input_dim * 0.5))
-        linear2_size = int(round(input_dim * 0.5))
-        linear3_size = int(round(input_dim * 0.5))
-        linear4_size = int(round(input_dim * 0.5))
+        linear2_size = int(round(linear1_size * 0.5))
+        linear3_size = int(round(linear2_size * 0.5))
+        linear4_size = int(round(linear3_size * 0.5))
         self.linear1 = nn.Linear(input_dim, linear1_size)
         self.softplus1 = nn.Softplus()
         self.linear2 = nn.Linear(linear1_size, linear2_size)
