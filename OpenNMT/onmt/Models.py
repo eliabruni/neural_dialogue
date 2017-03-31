@@ -248,15 +248,27 @@ class TempEstimator(nn.Module):
     def __init__(self, opt):
         super(TempEstimator, self).__init__()
         if opt.brnn:
-            self.linear1 = nn.Linear(opt.rnn_size*opt.layers*opt.batch_size*2, 1)
+            input_dim = opt.rnn_size*opt.layers*opt.batch_size*2
         else:
-            self.linear1 = nn.Linear(opt.rnn_size * opt.layers * opt.batch_size, 1)
+            input_dim = opt.rnn_size * opt.layers * opt.batch_size
+        linear1_size = round(input_dim * 0.5)
+        linear2_size = round(input_dim * 0.5)
+        linear3_size = round(input_dim * 0.5)
+        linear4_size = round(input_dim * 0.5)
+        self.linear1 = nn.Linear(opt.rnn_size*opt.layers*opt.batch_size*2, linear1_size)
+        self.linear2 = nn.Linear(linear1_size, linear2_size)
+        self.linear3 = nn.Linear(linear2_size, linear3_size)
+        self.linear4 = nn.Linear(linear3_size, linear4_size)
+        self.linear5 = nn.Linear(linear4_size, 1)
         self.softplus = nn.Softplus()
 
     def forward(self, input):
         out = self.linear1(input)
+        out = self.linear2(out)
+        out = self.linear3(out)
+        out = self.linear4(out)
+        out = self.linear5(out)
         temp = self.softplus(out)
-
         return temp
 
 class G(nn.Module):
