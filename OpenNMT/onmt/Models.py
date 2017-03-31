@@ -251,20 +251,14 @@ class TempEstimator(nn.Module):
             input_dim = opt.rnn_size*opt.layers*opt.batch_size*2
         else:
             input_dim = opt.rnn_size * opt.layers * opt.batch_size
-        linear1_size = int(round(input_dim * 0.5))
-        linear2_size = int(round(linear1_size * 0.5))
-        linear3_size = int(round(linear2_size * 0.5))
-        linear4_size = int(round(linear3_size * 0.5))
+        linear1_size = int(round(input_dim * 0.3))
+        linear2_size = int(round(linear1_size * 0.3))
         self.linear1 = nn.Linear(input_dim, linear1_size)
         self.softplus1 = nn.Softplus()
         self.linear2 = nn.Linear(linear1_size, linear2_size)
         self.softplus2 = nn.Softplus()
-        self.linear3 = nn.Linear(linear2_size, linear3_size)
+        self.linear3 = nn.Linear(linear2_size, 1)
         self.softplus3 = nn.Softplus()
-        self.linear4 = nn.Linear(linear3_size, linear4_size)
-        self.softplus4 = nn.Softplus()
-        self.linear5 = nn.Linear(linear4_size, 1)
-        self.softplus5 = nn.Softplus()
 
     def forward(self, input):
         out = self.linear1(input)
@@ -272,11 +266,7 @@ class TempEstimator(nn.Module):
         out = self.linear2(out)
         out = self.softplus2(out)
         out = self.linear3(out)
-        out = self.softplus3(out)
-        out = self.linear4(out)
-        out = self.softplus4(out)
-        out = self.linear5(out)
-        temp = self.softplus5(out)
+        temp = self.softplus3(out)
         return temp
 
 class G(nn.Module):
@@ -415,7 +405,16 @@ class D3(nn.Module):
         self.onehot_embedding = nn.Linear(self.vocab_size, self.word_vec_size)
         self.rnn1 = nn.LSTM(self.word_vec_size, self.rnn_size, num_layers=opt.d_layers, bidirectional=True,dropout=opt.d_dropout)
         self.attn = onmt.modules.GlobalAttention(self.rnn_size*2)
-        self.l_out = nn.Linear(self.rnn_size * 2, 1)
+        # self.l_out = nn.Linear(self.rnn_size * 2, 1)
+
+
+        l_out1_size = int(round(self.rnn_size * 2 * 0.3))
+        l_out2_size = int(round(l_out1_size * 0.3))
+        self.l_out1 = nn.Linear(self.rnn_size * 2, l_out1_size)
+        self.l_out2 = nn.Linear(l_out1_size, l_out2_size)
+        self.l_out3 = nn.Linear(l_out2_size, 1)
+
+
         if not self.opt.wasser:
             self.sigmoid = nn.Sigmoid()
 
@@ -438,7 +437,9 @@ class D3(nn.Module):
             hn_tot = hn_tot + tmp_hn
 
         out, attn = self.attn(hn_tot,torch.transpose(context,1,0))
-        out = self.l_out(out)
+        out = self.l_out1(out)
+        out = self.l_out2(out)
+        out = self.l_out3(out)
         if not self.opt.wasser:
             out = self.sigmoid(out)
         return out, attn.t()
