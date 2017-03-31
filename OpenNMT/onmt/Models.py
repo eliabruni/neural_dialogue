@@ -411,7 +411,9 @@ class D3(nn.Module):
         l_out1_size = int(round(self.rnn_size * 2 * 0.3))
         l_out2_size = int(round(l_out1_size * 0.3))
         self.l_out1 = nn.Linear(self.rnn_size * 2, l_out1_size)
+        self.relu1 = nn.ReLU()
         self.l_out2 = nn.Linear(l_out1_size, l_out2_size)
+        self.relu1 = nn.ReLU()
         self.l_out3 = nn.Linear(l_out2_size, 1)
 
 
