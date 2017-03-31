@@ -440,7 +440,9 @@ class D3(nn.Module):
 
         out, attn = self.attn(hn_tot,torch.transpose(context,1,0))
         out = self.l_out1(out)
+        out = self.relu1(out)
         out = self.l_out2(out)
+        out = self.relu2(out)
         out = self.l_out3(out)
         if not self.opt.wasser:
             out = self.sigmoid(out)
