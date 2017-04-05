@@ -615,8 +615,15 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         alpha = Variable(torch.rand(opt.batch_size))
                         alpha = alpha.repeat(differences.size(2),differences.size(1),1)
 
+                        if opt.cuda:
+                            alpha = alpha.cuda()
+
                         interpolates = real + (alpha * differences)
                         interpolates = Variable(torch.transpose(interpolates,1,0).data, requires_grad=True)
+
+
+                        if opt.cuda:
+                            interpolates = interpolates.cuda()
 
                         # gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
                         D_interpolates, attn = D(interpolates)
@@ -829,11 +836,18 @@ def main():
                 p.data.uniform_(-opt.param_init, opt.param_init)
 
             if opt.wasser:
-                optimizerG = optim.RMSprop(G.parameters(), lr=5e-5)
-                optimizerD = optim.RMSprop(D.parameters(), lr=5e-5)
+                if opt.lipschitz:
+                    # as in the original impl: https://github.com/igul222/improved_wgan_training/blob/master/gan_language.py#L114-L115
+                    optimizerG = optim.Adam(G.parameters(), lr=1e-4,  betas=(0.5, 0.9))
+                    optimizerD = optim.Adam(D.parameters(), lr=1e-4,  betas=(0.5, 0.9))
+                    optimizerH1 = optim.Adam(H1.parameters(), lr=1e-4,  betas=(0.5, 0.9))
+                    optimizerH2 = optim.Adam(H2.parameters(), lr=1e-4,  betas=(0.5, 0.9))
+                else:
+                    optimizerG = optim.RMSprop(G.parameters(), lr=5e-5)
+                    optimizerD = optim.RMSprop(D.parameters(), lr=5e-5)
 
-                optimizerH1 = optim.RMSprop(H1.parameters(), lr=5e-4)
-                optimizerH2 = optim.RMSprop(H2.parameters(), lr=5e-4)
+                    optimizerH1 = optim.RMSprop(H1.parameters(), lr=5e-4)
+                    optimizerH2 = optim.RMSprop(H2.parameters(), lr=5e-4)
             else:
                 optimizerD = optim.Adam(D.parameters(), lr=opt.learning_rate, betas=(opt.beta1, 0.999))
 
