@@ -593,19 +593,19 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
                         LAMBDA = 10  # Gradient penalty lambda hyperparameter.
 
-
                         if fake.size(1) > real.size(1):
                             diff = fake.size(1) - real.size(1)
-                            ext = Variable(torch.zeros(real.size(0), diff, real.size(2)))
-                            real = torch.cat([real, ext],1)
-                            differences = real - fake
+                            # ext = Variable(torch.zeros(real.size(0), diff, real.size(2)))
+                            # real = torch.cat([real, ext],1)
+                            differences = real - fake[:,:-diff,:]
                         elif real.size(1) > fake.size(1):
                             diff = real.size(1) - fake.size(1)
-                            ext = Variable(torch.zeros(fake.size(0), diff, fake.size(2)))
-                            fake = torch.cat([fake, ext], 1)
-                            differences = fake - real
+                            # ext = Variable(torch.zeros(fake.size(0), diff, fake.size(2)))
+                            # fake = torch.cat([fake, ext], 1)
+                            differences = fake - real[:,:-diff,:]
                         else:
                             differences = fake - real
+
 
                         #alpha = tf.random_uniform(
                         # shape=[BATCH_SIZE,1,1],
@@ -618,12 +618,10 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         interpolates = real + (alpha * differences)
                         interpolates = Variable(torch.transpose(interpolates,1,0).data, requires_grad=True)
 
+                        # gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
                         D_interpolates, attn = D(interpolates)
                         D_interpolates.backward(torch.ones(D_interpolates.size()))
                         gradients = interpolates.grad
-
-                        #gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
-                        #tf.gradients(yx,xs)
 
                         # slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1, 2]))
                         slopes = torch.sqrt(torch.sum(torch.sum((gradients * gradients),2),1))
@@ -638,7 +636,6 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
                     else:
                         errD.backward()
-
                         optimizerD.step()
                         for p in D.parameters():
                             p.data.clamp_(-0.01, 0.01)
