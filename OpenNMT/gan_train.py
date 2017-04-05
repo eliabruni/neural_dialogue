@@ -627,7 +627,10 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
                         # gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
                         D_interpolates, attn = D(interpolates)
-                        D_interpolates.backward(torch.ones(D_interpolates.size()))
+                        some_ones = torch.ones(D_interpolates.size())
+                        if opt.cuda:
+                            some_ones = some_ones.cuda()
+                        D_interpolates.backward(some_ones)
                         gradients = interpolates.grad
 
                         # slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1, 2]))
@@ -639,6 +642,12 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         # disc_cost += LAMBDA*gradient_penalty
                         errD += LAMBDA * gradient_penalty
                         errD.backward()
+
+                        # print('ITERATION: ')
+                        # for p in D.parameters():
+                        #     print('p.grad.data: ' + str(p.grad.data))
+
+
                         optimizerD.step()
 
                     else:
