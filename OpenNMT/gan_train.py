@@ -594,17 +594,20 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
 
                         if fake.size(1) > real.size(1):
                             diff = fake.size(1) - real.size(1)
+                            fake = fake[:, :-diff, :]
                             # ext = Variable(torch.zeros(real.size(0), diff, real.size(2)))
                             # real = torch.cat([real, ext],1)
-                            differences = real - fake[:,:-diff,:]
+                            differences = real - fake
+
                         elif real.size(1) > fake.size(1):
                             diff = real.size(1) - fake.size(1)
+                            real = real[:, :-diff, :]
                             # ext = Variable(torch.zeros(fake.size(0), diff, fake.size(2)))
                             # fake = torch.cat([fake, ext], 1)
-                            differences = fake - real[:,:-diff,:]
-                        else:
                             differences = fake - real
 
+                        else:
+                            differences = fake - real
 
                         #alpha = tf.random_uniform(
                         # shape=[BATCH_SIZE,1,1],
