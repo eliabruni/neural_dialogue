@@ -32,6 +32,8 @@ parser.add_argument('-supervision', type=bool, default=False,
                     help='Whether to use supervision')
 parser.add_argument('-wasser', type=bool, default=False,
                     help='Use wasserstein optimization')
+parser.add_argument('-lipschitz', type=bool, default=False,
+                    help='Improved wasserstein optimization')
 parser.add_argument('-bgan', type=bool, default=False,
                     help='Use boundary seeking gan')
 parser.add_argument('-conditioning_on_gold', type=bool, default=False,
@@ -577,15 +579,69 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     D_fake, attn = D(fake.detach())
                     D_G_z1 = D_fake.data.mean()
                     errD = -(torch.mean(D_real) - torch.mean(D_fake))
-                    errD.backward()
 
-                    optimizerD.step()
                     # print('ITERATION: ')
                     # for p in G.parameters():
                     #     print('p.grad.data: ' + str(p.grad.data))
 
-                    for p in D.parameters():
-                        p.data.clamp_(-0.01, 0.01)
+                    if opt.lipschitz:
+                        # WGAN lipschitz-penalty
+
+
+                        fake = torch.transpose(fake,1,0)
+                        real = torch.transpose(real,1,0)
+
+                        LAMBDA = 10  # Gradient penalty lambda hyperparameter.
+
+
+                        if fake.size(1) > real.size(1):
+                            diff = fake.size(1) - real.size(1)
+                            ext = Variable(torch.zeros(real.size(0), diff, real.size(2)))
+                            real = torch.cat([real, ext],1)
+                            differences = real - fake
+                        elif real.size(1) > fake.size(1):
+                            diff = real.size(1) - fake.size(1)
+                            ext = Variable(torch.zeros(fake.size(0), diff, fake.size(2)))
+                            fake = torch.cat([fake, ext], 1)
+                            differences = fake - real
+                        else:
+                            differences = fake - real
+
+                        #alpha = tf.random_uniform(
+                        # shape=[BATCH_SIZE,1,1],
+                        # minval=0.,
+                        # maxval=1.
+                        # )
+                        alpha = Variable(torch.rand(opt.batch_size))
+                        alpha = alpha.repeat(differences.size(2),differences.size(1),1)
+
+                        interpolates = real + (alpha * differences)
+                        interpolates = Variable(torch.transpose(interpolates,1,0).data, requires_grad=True)
+
+                        D_interpolates, attn = D(interpolates)
+                        D_interpolates.backward(torch.ones(D_interpolates.size()))
+                        gradients = interpolates.grad
+
+                        #gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
+                        #tf.gradients(yx,xs)
+
+                        # slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1, 2]))
+                        slopes = torch.sqrt(torch.sum(torch.sum((gradients * gradients),2),1))
+
+                        # gradient_penalty = tf.reduce_mean((slopes-1.)**2)
+                        gradient_penalty = torch.mean((slopes-1.)**2)
+
+                        # disc_cost += LAMBDA*gradient_penalty
+                        errD += LAMBDA * gradient_penalty
+                        errD.backward()
+                        optimizerD.step()
+
+                    else:
+                        errD.backward()
+
+                        optimizerD.step()
+                        for p in D.parameters():
+                            p.data.clamp_(-0.01, 0.01)
 
                     # That's the ration between disc train iterations/gen train iterations
                     if i % opt.g_train_interval == 0 and fake_mode == 0:
