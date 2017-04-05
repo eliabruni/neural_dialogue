@@ -46,7 +46,7 @@ parser.add_argument('-perturbe_real', type=bool, default=True,
                     help='Whether to use use gumbel for real data')
 parser.add_argument('-h_overfeat', type=int, default=10,
                     help='Overfeat the hallucinator on each batch')
-parser.add_argument('-g_train_interval', type=int, default=2,
+parser.add_argument('-g_train_interval', type=int, default=10,
                     help='After how many discriminator train iters to train the generator')
 parser.add_argument('-multi_fake', type=bool, default=False,
                     help='Whether to use supervision')
@@ -587,7 +587,6 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     if opt.lipschitz:
                         # WGAN lipschitz-penalty
 
-
                         fake = torch.transpose(fake,1,0)
                         real = torch.transpose(real,1,0)
 
@@ -612,7 +611,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         # minval=0.,
                         # maxval=1.
                         # )
-                        alpha = Variable(torch.rand(opt.batch_size))
+                        alpha = Variable(torch.rand(opt.batch_size), volatile=False)
                         alpha = alpha.repeat(differences.size(2),differences.size(1),1)
 
                         if opt.cuda:
@@ -640,7 +639,7 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                         gradient_penalty = torch.mean((slopes-1.)**2)
 
                         # disc_cost += LAMBDA*gradient_penalty
-                        errD += LAMBDA * gradient_penalty
+                        errD += LAMBDA * Variable(gradient_penalty.data, requires_grad=True, volatile=False)
                         errD.backward()
 
                         # print('ITERATION: ')
