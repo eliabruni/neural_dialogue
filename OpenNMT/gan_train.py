@@ -619,14 +619,14 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                             alpha = alpha.cuda()
 
                         interpolates = real + (alpha * differences)
-                        interpolates = Variable(torch.transpose(interpolates,1,0).data, requires_grad=True)
-
+                        interpolates = Variable(torch.transpose(interpolates,1,0).data, requires_grad=True, volatile=False)
 
                         if opt.cuda:
                             interpolates = interpolates.cuda()
 
                         # gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
                         D_interpolates, attn = D(interpolates)
+                        # here come a tmp trick as explained here: https://discuss.pytorch.org/t/directly-getting-gradients/688/3
                         some_ones = torch.ones(D_interpolates.size())
                         if opt.cuda:
                             some_ones = some_ones.cuda()
