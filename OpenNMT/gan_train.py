@@ -585,64 +585,74 @@ def trainModel(G, trainData, validData, dataset, optimizerG, D=None, optimizerD=
                     #     print('p.grad.data: ' + str(p.grad.data))
 
                     if opt.lipschitz:
-                        # WGAN lipschitz-penalty
+                        one = torch.FloatTensor([1])
+                        if opt.cuda:
+                            one = one.cuda( )
+                        # WGAN lipschitz-penalty (semi-improved)
 
                         fake = torch.transpose(fake,1,0)
                         real = torch.transpose(real,1,0)
 
-                        LAMBDA = 10  # Gradient penalty lambda hyperparameter.
+                        LAMBDA = 0.1  # Gradient penalty lambda hyperparameter.
 
                         if fake.size(1) > real.size(1):
                             diff = fake.size(1) - real.size(1)
                             fake = fake[:, :-diff, :]
                             # ext = Variable(torch.zeros(real.size(0), diff, real.size(2)))
                             # real = torch.cat([real, ext],1)
-                            differences = real - fake
+                            # differences = real - fake
 
                         elif real.size(1) > fake.size(1):
                             diff = real.size(1) - fake.size(1)
                             real = real[:, :-diff, :]
                             # ext = Variable(torch.zeros(fake.size(0), diff, fake.size(2)))
                             # fake = torch.cat([fake, ext], 1)
-                            differences = fake - real
+                            # differences = fake - real
 
-                        else:
-                            differences = fake - real
+                        # else:
+                        #     differences = fake - real
+                        dist = ((fake - real) ** 2).sum(1) ** 0.5
+                        lip_est = (D_real - D_fake).abs() / (dist + 1e-8)
+                        lip_loss = LAMBDA * ((1.0 - lip_est) ** 2).mean(0).view(1)
+                        lip_loss.backward(one)
+                        errD = errD + lip_loss
+
+
 
                         #alpha = tf.random_uniform(
                         # shape=[BATCH_SIZE,1,1],
                         # minval=0.,
                         # maxval=1.
                         # )
-                        alpha = Variable(torch.rand(opt.batch_size), volatile=False)
-                        alpha = alpha.repeat(differences.size(2),differences.size(1),1)
-
-                        if opt.cuda:
-                            alpha = alpha.cuda()
-
-                        interpolates = real + (alpha * differences)
-                        interpolates = Variable(torch.transpose(interpolates,1,0).data, requires_grad=True, volatile=False)
-
-                        if opt.cuda:
-                            interpolates = interpolates.cuda()
-
-                        # gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
-                        D_interpolates, attn = D(interpolates)
-                        # here come a tmp trick as explained here: https://discuss.pytorch.org/t/directly-getting-gradients/688/3
-                        some_ones = torch.ones(D_interpolates.size())
-                        if opt.cuda:
-                            some_ones = some_ones.cuda()
-                        D_interpolates.backward(some_ones)
-                        gradients = interpolates.grad
-
-                        # slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1, 2]))
-                        slopes = torch.sqrt(torch.sum(torch.sum((gradients * gradients),2),1))
-
-                        # gradient_penalty = tf.reduce_mean((slopes-1.)**2)
-                        gradient_penalty = torch.mean((slopes-1.)**2)
-
-                        # disc_cost += LAMBDA*gradient_penalty
-                        errD += LAMBDA * Variable(gradient_penalty.data, requires_grad=True, volatile=False)
+                        # alpha = Variable(torch.rand(opt.batch_size), volatile=False)
+                        # alpha = alpha.repeat(differences.size(2),differences.size(1),1)
+                        #
+                        # if opt.cuda:
+                        #     alpha = alpha.cuda()
+                        #
+                        # interpolates = real + (alpha * differences)
+                        # interpolates = Variable(torch.transpose(interpolates,1,0).data, requires_grad=True, volatile=False)
+                        #
+                        # if opt.cuda:
+                        #     interpolates = interpolates.cuda()
+                        #
+                        # # gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
+                        # D_interpolates, attn = D(interpolates)
+                        # # here come a tmp trick as explained here: https://discuss.pytorch.org/t/directly-getting-gradients/688/3
+                        # some_ones = torch.ones(D_interpolates.size())
+                        # if opt.cuda:
+                        #     some_ones = some_ones.cuda()
+                        # D_interpolates.backward(some_ones)
+                        # gradients = interpolates.grad
+                        #
+                        # # slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1, 2]))
+                        # slopes = torch.sqrt(torch.sum(torch.sum((gradients * gradients),2),1))
+                        #
+                        # # gradient_penalty = tf.reduce_mean((slopes-1.)**2)
+                        # gradient_penalty = torch.mean((slopes-1.)**2)
+                        #
+                        # # disc_cost += LAMBDA*gradient_penalty
+                        # errD += LAMBDA * Variable(gradient_penalty.data, requires_grad=True, volatile=False)
                         errD.backward()
 
                         # print('ITERATION: ')
